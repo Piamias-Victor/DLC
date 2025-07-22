@@ -1,15 +1,12 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
   --background: #ffffff;
   --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --pharmacy-primary: #0ea5e9;
+  --pharmacy-secondary: #0284c7;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -22,5 +19,57 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans, Arial, Helvetica, sans-serif);
+  line-height: 1.6;
+}
+
+/* Composants utilitaires pharmacie */
+@layer components {
+  .btn-primary {
+    @apply bg-pharmacy-500 hover:bg-pharmacy-600 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+  }
+  
+  .card {
+    @apply bg-white rounded-lg shadow-md border border-gray-200 p-6;
+  }
+  
+  .card-dark {
+    @apply bg-gray-800 border-gray-700;
+  }
+  
+  .input-field {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pharmacy-500 focus:border-transparent transition-all duration-200;
+  }
+  
+  .badge-urgency-low {
+    @apply bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full;
+  }
+  
+  .badge-urgency-medium {
+    @apply bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded-full;
+  }
+  
+  .badge-urgency-high {
+    @apply bg-orange-100 text-orange-800 text-xs font-medium px-2.5 py-0.5 rounded-full;
+  }
+  
+  .badge-urgency-critical {
+    @apply bg-red-100 text-red-800 text-xs font-medium px-2.5 py-0.5 rounded-full;
+  }
+}
+
+/* Mobile optimisations */
+@layer utilities {
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+  
+  .safe-area-inset {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
 }
