@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { BarcodeInput } from '@/components/molecules/BarcodeInput';
 import { Package, Calendar, Hash, Send } from 'lucide-react';
+import { ParsedCode } from '@/lib/utils/codeParser';
 
 interface SignalementData {
   codeBarres: string;
@@ -25,8 +26,65 @@ export function SignalementForm({ onSubmit, onError, isLoading = false }: Signal
     commentaire: ''
   });
 
-  const handleScan = (code: string) => {
+  const handleScan = (code: string, parsedData?: ParsedCode) => {
+    console.log('🔍 Code scanné reçu:', code);
+    console.log('📊 Données parsées reçues:', parsedData);
+    
+    // Si pas de données parsées, parser nous-mêmes
+    if (!parsedData && code.length > 13) {
+      console.log('🔧 Parsing manuel du code Data Matrix');
+      
+      let processedCode = code;
+      let autoDate = '';
+      
+      // Extraction GTIN (AI 01) - 14 caractères après "01"
+      if (code.startsWith('01')) {
+        const gtin = code.substring(2, 16); // Position 2 à 15 (14 caractères)
+        processedCode = gtin;
+        console.log('📦 GTIN extrait:', gtin);
+      }
+      
+      // Extraction manuelle de la date (AI 17)
+      const dateMatch = code.match(/17(\d{6})/);
+      if (dateMatch) {
+        const dateStr = dateMatch[1]; // YYMMDD
+        console.log('📅 Date trouvée:', dateStr);
+        
+        // Conversion YYMMDD vers YYYY-MM-DD
+        const yy = parseInt(dateStr.substring(0, 2));
+        const mm = dateStr.substring(2, 4);
+        const dd = dateStr.substring(4, 6);
+        const year = yy < 50 ? 2000 + yy : 1900 + yy;
+        autoDate = `${year}-${mm}-${dd}`;
+        
+        console.log('📅 Date convertie:', autoDate);
+      }
+      
+      // Auto-remplissage avec GTIN + date
+      setFormData(prev => ({ 
+        ...prev, 
+        codeBarres: processedCode,
+        datePeremption: autoDate || prev.datePeremption
+      }));
+      
+      console.log('✅ GTIN:', processedCode, 'Date:', autoDate);
+      return;
+    }
+    
+    // Fonctionnement normal
     setFormData(prev => ({ ...prev, codeBarres: code }));
+    
+    // Auto-remplissage date si détectée dans Data Matrix
+    if (parsedData?.expirationDate && parsedData.codeType === 'DATA_MATRIX') {
+      console.log('📅 Auto-remplissage date:', parsedData.expirationDate);
+      setFormData(prev => ({ 
+        ...prev, 
+        codeBarres: parsedData.processedCode || code,
+        datePeremption: parsedData.expirationDate || prev.datePeremption
+      }));
+    }
+    
+    console.log('✅ Code mis à jour dans formData');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -56,14 +114,10 @@ export function SignalementForm({ onSubmit, onError, isLoading = false }: Signal
         {/* Scanner */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Code-Barres *</label>
-          <BarcodeInput 
-            onScan={handleScan} 
-            onError={onError}
-            key="barcode-input" 
-          />
+          <BarcodeInput onScan={handleScan} onError={onError} />
           {formData.codeBarres && (
-            <div className="mt-2 p-2 bg-green-50 rounded border">
-              <code className="text-green-800 font-mono">{formData.codeBarres}</code>
+            <div className="mt-2 p-2 bg-green-50 rounded border border-green-200">
+              <code className="text-green-800 font-mono text-sm">{formData.codeBarres}</code>
             </div>
           )}
         </div>
