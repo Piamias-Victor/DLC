@@ -11,7 +11,6 @@ export default function TestScannerPage() {
   const handleScan = (code: string) => {
     const time = new Date().toLocaleTimeString();
     setScannedCodes(prev => [{code, time}, ...prev.slice(0, 9)]);
-    console.log('Code scanné:', code);
   };
 
   const handleError = (error: string) => {
@@ -47,8 +46,6 @@ export default function TestScannerPage() {
             onError={handleError}
             placeholder="🔍 Scannez ou tapez le code-barres + Entrée..."
             autoFocus={true}
-            minLength={8}
-            maxLength={20}
           />
           
           <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
