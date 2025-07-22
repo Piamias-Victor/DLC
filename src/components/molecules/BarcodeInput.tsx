@@ -22,29 +22,25 @@ export function BarcodeInput({
   const [isValid, setIsValid] = useState<boolean | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Validation du code (accepte tout)
-  const validateCode = (code: string): boolean => {
-    const clean = code.trim();
-    return clean.length > 0;
-  };
-
   // Gestion changement valeur
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setValue(newValue);
     setIsValid(newValue.trim().length > 0 ? true : null);
+    
+    // 🚀 Enregistrement automatique dès qu'il y a du contenu
+    if (newValue.trim()) {
+      onScan(newValue.trim());
+    }
   };
 
-  // Gestion Enter (scan terminé)
+  // Gestion Enter (optionnel maintenant)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && value.trim()) {
       const code = value.trim();
-      
-      if (validateCode(code)) {
-        onScan(code);
-        setValue(''); // Clear après scan réussi
-        setIsValid(null);
-      }
+      onScan(code);
+      setValue(''); // Clear après scan Enter
+      setIsValid(null);
     }
   };
 
@@ -107,6 +103,11 @@ export function BarcodeInput({
             </button>
           </div>
         )}
+      </div>
+
+      {/* Info temps réel */}
+      <div className="text-sm text-gray-500">
+        {value.length > 0 ? `${value.length} caractères` : 'En attente de scan...'}
       </div>
 
     </div>
