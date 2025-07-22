@@ -35,7 +35,7 @@ export default function TestScannerPage() {
             Scanner Zebra - Input Mode
           </h1>
           <p className="text-gray-600">
-            L'input reste focusé, scannez directement avec le Zebra
+            L input reste focusé, scannez directement avec le Zebra
           </p>
         </header>
 
@@ -53,7 +53,7 @@ export default function TestScannerPage() {
           
           <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
             <p className="text-sm text-blue-700">
-              <strong>Instructions:</strong> L'input est auto-focusé. 
+              <strong>Instructions:</strong> L input est auto-focusé. 
               Scannez avec le Zebra ou tapez manuellement puis appuyez sur Entrée.
             </p>
           </div>
