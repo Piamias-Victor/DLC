@@ -1,7 +1,7 @@
 // src/components/organisms/SignalementForm.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Package, Calendar, Hash, Send, AlertCircle } from 'lucide-react';
 import { Button } from '../atoms/Button';
 import { Card, CardHeader, CardContent } from '../atoms/Card';
@@ -39,6 +39,9 @@ export function SignalementForm({
   
   const [errors, setErrors] = useState<Partial<SignalementData>>({});
   const [showSuccess, setShowSuccess] = useState(false);
+  const [shouldRefocus, setShouldRefocus] = useState(false);
+  const [clearTrigger, setClearTrigger] = useState(0);
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   // Gérer le scan de code-barres
   const handleScan = (code: string, parsedData?: ParsedCode) => {
@@ -95,7 +98,8 @@ export function SignalementForm({
     }
     
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const isValid = Object.keys(newErrors).length === 0;
+    return isValid;
   };
 
   // Soumission du formulaire
@@ -107,6 +111,8 @@ export function SignalementForm({
       return;
     }
 
+    // Marquer qu'on veut refocus après la fin du loading
+    setShouldRefocus(true);
     onSubmit(formData);
     
     // Reset form après succès
@@ -118,12 +124,19 @@ export function SignalementForm({
     });
     setErrors({});
     
-    // Remettre le focus sur l'input de scan après délai court
-    setTimeout(() => {
-      const scanInput = document.querySelector('input[placeholder*="code-barres"]') as HTMLInputElement;
-      scanInput?.focus();
-    }, 100);
+    // Déclencher le clear de l'input
+    setClearTrigger(prev => prev + 1);
   };
+
+  // Effect pour remettre le focus quand isLoading passe de true à false
+  useEffect(() => {
+    if (!isLoading && shouldRefocus) {
+      setTimeout(() => {
+        barcodeInputRef.current?.focus();
+        setShouldRefocus(false);
+      }, 200);
+    }
+  }, [isLoading, shouldRefocus]);
 
   // Calculer l'urgence basée sur la date
   const calculateUrgency = () => {
@@ -166,9 +179,11 @@ export function SignalementForm({
           
           {/* Scanner de code-barres */}
           <BarcodeInput
+            ref={barcodeInputRef}
             onScan={handleScan}
             onError={onError}
             autoFocus={true}
+            clearTrigger={clearTrigger}
           />
           
           {/* Code actuel affiché */}
@@ -230,7 +245,9 @@ export function SignalementForm({
             </label>
             <textarea
               value={formData.commentaire}
-              onChange={(e) => setFormData(prev => ({ ...prev, commentaire: e.target.value }))}
+              onChange={(e) => {
+                setFormData(prev => ({ ...prev, commentaire: e.target.value }));
+              }}
               placeholder="Informations complémentaires..."
               rows={3}
               className="w-full px-3 py-2.5 text-sm bg-white border border-gray-300 rounded-lg shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors duration-200 resize-none"

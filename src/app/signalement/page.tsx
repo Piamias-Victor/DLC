@@ -1,7 +1,7 @@
 // src/app/signalement/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Package, Calendar, Hash } from 'lucide-react';
 
 import { SignalementData, SignalementWithId } from '@/lib/types';
@@ -21,6 +21,9 @@ export default function SignalementPage() {
   
   const [historique, setHistorique] = useState<SignalementWithId[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [shouldRefocus, setShouldRefocus] = useState(false);
+  const [clearTrigger, setClearTrigger] = useState(0);
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   const handleScan = (code: string, parsedData?: ParsedCode) => {
     let processedCode = code;
@@ -51,6 +54,7 @@ export default function SignalementPage() {
       return;
     }
 
+    setShouldRefocus(true);
     setIsLoading(true);
     
     // Simulation envoi
@@ -72,8 +76,21 @@ export default function SignalementPage() {
       commentaire: ''
     });
     
+    // Déclencher le clear de l'input
+    setClearTrigger(prev => prev + 1);
+    
     setIsLoading(false);
   };
+
+  // Effect pour remettre le focus quand isLoading passe de true à false
+  useEffect(() => {
+    if (!isLoading && shouldRefocus) {
+      setTimeout(() => {
+        barcodeInputRef.current?.focus();
+        setShouldRefocus(false);
+      }, 200);
+    }
+  }, [isLoading, shouldRefocus]);
 
   const isFormValid = formData.codeBarres.trim() && 
                       formData.quantite.trim() && 
@@ -108,8 +125,10 @@ export default function SignalementPage() {
                 
                 {/* Scanner */}
                 <BarcodeInput
+                  ref={barcodeInputRef}
                   onScan={handleScan}
                   autoFocus={true}
+                  clearTrigger={clearTrigger}
                 />                
 
                 {/* Quantité et Date */}
@@ -119,7 +138,9 @@ export default function SignalementPage() {
                     type="number"
                     min="1"
                     value={formData.quantite}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, quantite: e.target.value }))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setFormData(prev => ({ ...prev, quantite: e.target.value }));
+                    }}
                     leftIcon={<Hash className="w-4 h-4" />}
                     placeholder="Ex: 15"
                   />
@@ -128,7 +149,9 @@ export default function SignalementPage() {
                     label="Date de péremption"
                     type="date"
                     value={formData.datePeremption}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData(prev => ({ ...prev, datePeremption: e.target.value }))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setFormData(prev => ({ ...prev, datePeremption: e.target.value }));
+                    }}
                     leftIcon={<Calendar className="w-4 h-4" />}
                   />
                 </div>
