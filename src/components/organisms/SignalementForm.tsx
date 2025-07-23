@@ -1,9 +1,14 @@
+// src/components/forms/SignalementForm.tsx
 'use client';
 
 import { useState } from 'react';
-import { BarcodeInput } from '@/components/molecules/BarcodeInput';
-import { Package, Calendar, Hash, Send } from 'lucide-react';
-import { ParsedCode } from '@/lib/utils/codeParser';
+import { Package, Calendar, Hash, Send, AlertCircle } from 'lucide-react';
+import { Button } from '../atoms/Button';
+import { Card, CardHeader, CardContent } from '../atoms/Card';
+import { Input } from '../atoms/Input';
+import { BarcodeInput } from '../molecules/BarcodeInput';
+import { Badge } from '../atoms/Badge';
+import { ParsedCode } from '@/lib/types';
 
 interface SignalementData {
   codeBarres: string;
@@ -16,126 +21,286 @@ interface SignalementFormProps {
   onSubmit: (data: SignalementData) => void;
   onError?: (error: string) => void;
   isLoading?: boolean;
+  className?: string;
 }
 
-export function SignalementForm({ onSubmit, onError, isLoading = false }: SignalementFormProps) {
+export function SignalementForm({ 
+  onSubmit, 
+  onError, 
+  isLoading = false,
+  className = ""
+}: SignalementFormProps) {
   const [formData, setFormData] = useState<SignalementData>({
     codeBarres: '',
-    quantite: '0',
+    quantite: '',
     datePeremption: '',
     commentaire: ''
   });
+  
+  const [errors, setErrors] = useState<Partial<SignalementData>>({});
+  const [showSuccess, setShowSuccess] = useState(false);
 
+  // Gérer le scan de code-barres
   const handleScan = (code: string, parsedData?: ParsedCode) => {
-    // Parsing manuel si Data Matrix (> 13 caractères)
-    if (code.length > 13) {
-      let processedCode = code;
-      let autoDate = '';
-      
-      // GTIN (AI 01)
-      if (code.startsWith('01')) {
-        processedCode = code.substring(2, 16);
+    let processedCode = code;
+    let autoDate = formData.datePeremption;
+    
+    // Traitement spécial pour Data Matrix
+    if (parsedData?.codeType === 'DATA_MATRIX') {
+      if (parsedData.gtin) {
+        processedCode = parsedData.gtin;
       }
-      
-      // Date (AI 17)
-      const dateMatch = code.match(/17(\d{6})/);
-      if (dateMatch) {
-        const yy = parseInt(dateMatch[1].substring(0, 2));
-        const mm = dateMatch[1].substring(2, 4);
-        const dd = dateMatch[1].substring(4, 6);
-        const year = yy < 50 ? 2000 + yy : 1900 + yy;
-        autoDate = `${year}-${mm}-${dd}`;
+      if (parsedData.expirationDate) {
+        autoDate = parsedData.expirationDate;
       }
-      
-      setFormData(prev => ({ 
-        ...prev, 
-        codeBarres: processedCode,
-        datePeremption: autoDate || prev.datePeremption
-      }));
-    } else {
-      setFormData(prev => ({ ...prev, codeBarres: code }));
     }
+    
+    setFormData(prev => ({ 
+      ...prev, 
+      codeBarres: processedCode,
+      datePeremption: autoDate
+    }));
+    
+    // Clear error si il y en avait une
+    if (errors.codeBarres) {
+      setErrors(prev => ({ ...prev, codeBarres: undefined }));
+    }
+    
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 2000);
   };
 
+  // Validation du formulaire
+  const validateForm = (): boolean => {
+    const newErrors: Partial<SignalementData> = {};
+    
+    if (!formData.codeBarres.trim()) {
+      newErrors.codeBarres = 'Code-barres requis';
+    }
+    
+    if (!formData.quantite.trim()) {
+      newErrors.quantite = 'Quantité requise';
+    } else if (parseInt(formData.quantite) <= 0) {
+      newErrors.quantite = 'Quantité doit être > 0';
+    }
+    
+    if (!formData.datePeremption) {
+      newErrors.datePeremption = 'Date de péremption requise';
+    } else {
+      const today = new Date();
+      const expDate = new Date(formData.datePeremption);
+      if (expDate <= today) {
+        newErrors.datePeremption = 'Date doit être future';
+      }
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Soumission du formulaire
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.codeBarres.trim() || !formData.quantite.trim() || 
-        parseInt(formData.quantite) <= 0 || !formData.datePeremption) {
-      onError?.('Tous les champs requis doivent être remplis (quantité > 0)');
+    if (!validateForm()) {
+      onError?.('Veuillez corriger les erreurs du formulaire');
       return;
     }
 
     onSubmit(formData);
-    setFormData({ codeBarres: '', quantite: '0', datePeremption: '', commentaire: '' });
+    
+    // Reset form après succès
+    setFormData({
+      codeBarres: '',
+      quantite: '',
+      datePeremption: '',
+      commentaire: ''
+    });
+    setErrors({});
   };
 
+  // Calculer l'urgence basée sur la date
+  const calculateUrgency = () => {
+    if (!formData.datePeremption) return null;
+    
+    const today = new Date();
+    const expDate = new Date(formData.datePeremption);
+    const diffDays = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays <= 7) return 'critical';
+    if (diffDays <= 15) return 'high';
+    if (diffDays <= 30) return 'medium';
+    return 'low';
+  };
+
+  const urgency = calculateUrgency();
   const isFormValid = formData.codeBarres.trim() && 
                       formData.quantite.trim() && 
                       parseInt(formData.quantite) > 0 && 
-                      formData.datePeremption;
+                      formData.datePeremption &&
+                      Object.keys(errors).length === 0;
 
   return (
-    <div className="card">
-      <div className="flex items-center gap-3 mb-6">
-        <Package className="w-6 h-6 text-pharmacy-500" />
-        <h2 className="text-xl font-semibold">Nouveau Signalement</h2>
-      </div>
+    <Card className={`animate-fade-in ${className}`}>
+      <CardHeader
+        title="Nouveau Signalement"
+        subtitle="Produit à date courte détecté"
+        icon={<Package className="w-6 h-6 text-blue-600" />}
+        action={
+          showSuccess && (
+            <Badge variant="success" className="animate-scale-in">
+              Code scanné ✓
+            </Badge>
+          )
+        }
+      />
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Code-Barres *</label>
-          <BarcodeInput onScan={handleScan} onError={onError} />
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          
+          {/* Scanner de code-barres */}
+          <BarcodeInput
+            onScan={handleScan}
+            onError={onError}
+            autoFocus={true}
+          />
+          
+          {/* Code actuel affiché */}
           {formData.codeBarres && (
-            <div className="mt-2 p-2 bg-green-50 rounded border">
-              <code className="text-green-800 font-mono text-sm">{formData.codeBarres}</code>
+            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 animate-slide-up">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-medium text-blue-600 uppercase">
+                    Code produit
+                  </span>
+                  <div className="font-mono text-lg text-blue-900 mt-0.5">
+                    {formData.codeBarres}
+                  </div>
+                </div>
+                {urgency && (
+                  <UrgencyIndicator level={urgency} />
+                )}
+              </div>
             </div>
           )}
-        </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Hash className="w-4 h-4 inline mr-1" />Quantité *
-            </label>
-            <input
+          {/* Quantité et Date */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Quantité"
               type="number"
               min="1"
               value={formData.quantite}
-              onChange={(e) => setFormData(prev => ({ ...prev, quantite: e.target.value }))}
-              className="input-field"
+              onChange={(e) => {
+                setFormData(prev => ({ ...prev, quantite: e.target.value }));
+                if (errors.quantite) {
+                  setErrors(prev => ({ ...prev, quantite: undefined }));
+                }
+              }}
+              leftIcon={<Hash className="w-4 h-4" />}
               placeholder="Ex: 15"
+              error={errors.quantite}
             />
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Calendar className="w-4 h-4 inline mr-1" />Date péremption *
-            </label>
-            <input
+            <Input
+              label="Date de péremption"
               type="date"
               value={formData.datePeremption}
-              onChange={(e) => setFormData(prev => ({ ...prev, datePeremption: e.target.value }))}
-              className="input-field"
+              onChange={(e) => {
+                setFormData(prev => ({ ...prev, datePeremption: e.target.value }));
+                if (errors.datePeremption) {
+                  setErrors(prev => ({ ...prev, datePeremption: undefined }));
+                }
+              }}
+              leftIcon={<Calendar className="w-4 h-4" />}
+              error={errors.datePeremption}
             />
           </div>
-        </div>
 
-        <button
-          type="submit"
-          disabled={isLoading || !isFormValid}
-          className="w-full py-3 text-base font-medium rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed bg-pharmacy-500 hover:bg-pharmacy-600 text-white"
-        >
-          {isLoading ? 'Envoi...' : (
-            <>
-              <Send className="w-4 h-4 inline mr-2" />
-              Envoyer Signalement
-            </>
+          {/* Commentaire optionnel */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Commentaire (optionnel)
+            </label>
+            <textarea
+              value={formData.commentaire}
+              onChange={(e) => setFormData(prev => ({ ...prev, commentaire: e.target.value }))}
+              placeholder="Informations complémentaires..."
+              rows={3}
+              className="w-full px-3 py-2.5 text-sm bg-white border border-gray-300 rounded-lg shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors duration-200 resize-none"
+            />
+          </div>
+
+          {/* Bouton de soumission */}
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            isLoading={isLoading}
+            loadingText="Envoi en cours..."
+            disabled={!isFormValid}
+            className="w-full"
+          >
+            <Send className="w-4 h-4" />
+            Envoyer le Signalement
+          </Button>
+
+          {/* Résumé rapide */}
+          {isFormValid && (
+            <div className="p-4 bg-gray-50 rounded-lg border animate-fade-in">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-medium text-gray-900 mb-1">Résumé du signalement</p>
+                  <p className="text-gray-600">
+                    {formData.quantite} unité(s) expire(nt) le{' '}
+                    {new Date(formData.datePeremption).toLocaleDateString('fr-FR')}
+                    {urgency && (
+                      <span className="ml-2">
+                        • Urgence: <UrgencyText level={urgency} />
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
           )}
-        </button>
+          
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
 
-      </form>
+// Composants auxiliaires
+interface UrgencyIndicatorProps {
+  level: 'low' | 'medium' | 'high' | 'critical';
+}
+
+function UrgencyIndicator({ level }: UrgencyIndicatorProps) {
+  const configs = {
+    low: { color: 'text-green-600', bg: 'bg-green-100', label: 'Faible' },
+    medium: { color: 'text-orange-600', bg: 'bg-orange-100', label: 'Moyen' },
+    high: { color: 'text-red-600', bg: 'bg-red-100', label: 'Élevé' },
+    critical: { color: 'text-red-700', bg: 'bg-red-200', label: 'Critique' }
+  };
+  
+  const config = configs[level];
+  
+  return (
+    <div className={`px-2 py-1 rounded-full ${config.bg} ${config.color} text-xs font-medium`}>
+      {config.label}
     </div>
   );
+}
+
+function UrgencyText({ level }: UrgencyIndicatorProps) {
+  const labels = {
+    low: 'faible',
+    medium: 'moyenne', 
+    high: 'élevée',
+    critical: 'critique'
+  };
+  
+  return <span className="font-medium">{labels[level]}</span>;
 }

@@ -1,8 +1,12 @@
+// src/components/forms/BarcodeInput.tsx
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { ScanLine, X } from 'lucide-react';
-import { parseCode, ParsedCode } from '@/lib/utils/codeParser';
+import { ScanLine, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { Input } from '../atoms/Input';
+import { Badge } from '../atoms/Badge';
+import { ParsedCode } from '@/lib/types';
+import { parseCode } from '@/lib/utils/codeParser';
 
 interface BarcodeInputProps {
   onScan: (code: string, parsedData?: ParsedCode) => void;
@@ -10,44 +14,54 @@ interface BarcodeInputProps {
   placeholder?: string;
   autoFocus?: boolean;
   className?: string;
+  label?: string;
 }
 
 export function BarcodeInput({
   onScan,
+  onError,
   placeholder = "Scannez ou tapez le code-barres...",
   autoFocus = true,
-  className = ""
+  className = "",
+  label = "Code-Barres"
 }: BarcodeInputProps) {
   
   const [value, setValue] = useState('');
   const [isValid, setIsValid] = useState<boolean | null>(null);
   const [parsedData, setParsedData] = useState<ParsedCode | null>(null);
+  const [error, setError] = useState<string>('');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const validateAndParse = (code: string) => {
+    if (!code.trim()) {
+      setIsValid(null);
+      setParsedData(null);
+      setError('');
+      return;
+    }
+
+    try {
+      const parsed = parseCode(code.trim());
+      setParsedData(parsed);
+      setIsValid(true);
+      setError('');
+      onScan(code.trim(), parsed);
+    } catch (err) {
+      setIsValid(false);
+      setError('Code invalide');
+      onError?.(`Erreur de parsing: ${err}`);
+    }
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setValue(newValue);
-    
-    if (newValue.trim()) {
-      setIsValid(true);
-      
-      // Parser le code
-      const parsed = parseCode(newValue.trim());
-      setParsedData(parsed);
-      
-      // Envoyer le code + données parsées
-      onScan(newValue.trim(), parsed);
-    } else {
-      setIsValid(null);
-      setParsedData(null);
-    }
+    validateAndParse(newValue);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && value.trim()) {
-      setValue('');
-      setIsValid(null);
-      setParsedData(null);
+    if (e.key === 'Enter' && value.trim() && isValid) {
+      handleClear();
     }
   };
 
@@ -55,7 +69,12 @@ export function BarcodeInput({
     setValue('');
     setIsValid(null);
     setParsedData(null);
+    setError('');
     inputRef.current?.focus();
+  };
+
+  const handleFocus = () => {
+    inputRef.current?.select();
   };
 
   useEffect(() => {
@@ -64,69 +83,133 @@ export function BarcodeInput({
     }
   }, [autoFocus]);
 
-  const handleFocus = () => {
-    if (inputRef.current) {
-      inputRef.current.select();
+  const getCodeTypeConfig = (type: ParsedCode['codeType']) => {
+    switch (type) {
+      case 'EAN13':
+        return { variant: 'primary' as const, label: 'EAN13' };
+      case 'DATA_MATRIX':
+        return { variant: 'info' as const, label: 'Data Matrix' };
+      default:
+        return { variant: 'default' as const, label: 'Inconnu' };
     }
   };
 
-  const getTypeColor = (type: ParsedCode['codeType']) => {
-    switch (type) {
-      case 'EAN13': return 'text-blue-600';
-      case 'DATA_MATRIX': return 'text-purple-600';
-      default: return 'text-gray-600';
-    }
-  };
+  const rightIcon = value ? (
+    <button
+      onClick={handleClear}
+      className="p-1 hover:bg-gray-100 rounded transition-colors"
+      type="button"
+    >
+      <X className="w-4 h-4" />
+    </button>
+  ) : null;
+
+  const leftIcon = <ScanLine className="w-5 h-5" />;
 
   return (
     <div className={`space-y-3 ${className}`}>
-      
-      <div className="relative">
-        <div className="absolute left-3 top-1/2 -translate-y-1/2">
-          <ScanLine className="w-5 h-5 text-gray-400" />
-        </div>
-        
-        <input
-          ref={inputRef}
-          type="text"
-          value={value}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          onFocus={handleFocus}
-          placeholder={placeholder}
-          className={`
-            w-full pl-12 pr-12 py-4 text-lg font-mono
-            border-2 rounded-lg transition-all duration-200
-            ${isValid === true ? 'border-green-500 bg-green-50' : ''}
-            ${isValid === null ? 'border-gray-300 focus:border-pharmacy-500 focus:ring-2 focus:ring-pharmacy-500/20' : ''}
-          `}
-        />
+      <Input
+        ref={inputRef}
+        label={label}
+        value={value}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        onFocus={handleFocus}
+        placeholder={placeholder}
+        leftIcon={leftIcon}
+        rightIcon={rightIcon}
+        variant={isValid === false ? 'error' : isValid === true ? 'success' : 'default'}
+        error={error}
+        className="font-mono text-base"
+      />
 
-        {value && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2">
-            <button
-              onClick={handleClear}
-              className="p-1 hover:bg-gray-200 rounded transition-colors"
-              type="button"
+      {/* Status & Info */}
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-gray-500">
+          {value.length > 0 
+            ? `${value.length} caractères` 
+            : 'En attente de scan...'
+          }
+        </span>
+        
+        <div className="flex items-center gap-2">
+          {isValid === true && (
+            <CheckCircle className="w-4 h-4 text-green-500" />
+          )}
+          
+          {isValid === false && (
+            <AlertCircle className="w-4 h-4 text-red-500" />
+          )}
+          
+          {parsedData && (
+            <Badge 
+              variant={getCodeTypeConfig(parsedData.codeType).variant}
+              size="sm"
             >
-              <X className="w-4 h-4 text-gray-400" />
-            </button>
+              {getCodeTypeConfig(parsedData.codeType).label}
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {/* Parsed Data Display */}
+      {parsedData && value && (
+        <div className="animate-fade-in">
+          <CodeDisplay parsedData={parsedData} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Composant d'affichage des données parsées
+interface CodeDisplayProps {
+  parsedData: ParsedCode;
+}
+
+function CodeDisplay({ parsedData }: CodeDisplayProps) {
+  return (
+    <div className="p-3 bg-gray-50 rounded-lg border space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-gray-600 uppercase">
+          Données extraites
+        </span>
+        <Badge size="sm" variant="primary">
+          {parsedData.codeType}
+        </Badge>
+      </div>
+      
+      <div className="grid grid-cols-1 gap-2 text-sm">
+        {parsedData.gtin && (
+          <div className="flex justify-between">
+            <span className="text-gray-600">GTIN:</span>
+            <code className="font-mono text-gray-900">{parsedData.gtin}</code>
+          </div>
+        )}
+        
+        {parsedData.expirationDate && (
+          <div className="flex justify-between">
+            <span className="text-gray-600">Expiration:</span>
+            <span className="font-medium text-gray-900">
+              {new Date(parsedData.expirationDate).toLocaleDateString('fr-FR')}
+            </span>
+          </div>
+        )}
+        
+        {parsedData.batchLot && (
+          <div className="flex justify-between">
+            <span className="text-gray-600">Lot:</span>
+            <code className="font-mono text-gray-900">{parsedData.batchLot}</code>
+          </div>
+        )}
+        
+        {parsedData.serialNumber && (
+          <div className="flex justify-between">
+            <span className="text-gray-600">Série:</span>
+            <code className="font-mono text-gray-900">{parsedData.serialNumber}</code>
           </div>
         )}
       </div>
-
-      <div className="flex justify-between text-sm">
-        <span className="text-gray-500">
-          {value.length > 0 ? `${value.length} caractères` : 'En attente de scan...'}
-        </span>
-        
-        {parsedData && (
-          <span className={`font-medium ${getTypeColor(parsedData.codeType)}`}>
-            {parsedData.codeType} ✓
-          </span>
-        )}
-      </div>
-
     </div>
   );
 }
