@@ -151,65 +151,6 @@ export function BarcodeInput({
           )}
         </div>
       </div>
-
-      {/* Parsed Data Display */}
-      {parsedData && value && (
-        <div className="animate-fade-in">
-          <CodeDisplay parsedData={parsedData} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Composant d'affichage des données parsées
-interface CodeDisplayProps {
-  parsedData: ParsedCode;
-}
-
-function CodeDisplay({ parsedData }: CodeDisplayProps) {
-  return (
-    <div className="p-3 bg-gray-50 rounded-lg border space-y-2">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-600 uppercase">
-          Données extraites
-        </span>
-        <Badge size="sm" variant="primary">
-          {parsedData.codeType}
-        </Badge>
-      </div>
-      
-      <div className="grid grid-cols-1 gap-2 text-sm">
-        {parsedData.gtin && (
-          <div className="flex justify-between">
-            <span className="text-gray-600">GTIN:</span>
-            <code className="font-mono text-gray-900">{parsedData.gtin}</code>
-          </div>
-        )}
-        
-        {parsedData.expirationDate && (
-          <div className="flex justify-between">
-            <span className="text-gray-600">Expiration:</span>
-            <span className="font-medium text-gray-900">
-              {new Date(parsedData.expirationDate).toLocaleDateString('fr-FR')}
-            </span>
-          </div>
-        )}
-        
-        {parsedData.batchLot && (
-          <div className="flex justify-between">
-            <span className="text-gray-600">Lot:</span>
-            <code className="font-mono text-gray-900">{parsedData.batchLot}</code>
-          </div>
-        )}
-        
-        {parsedData.serialNumber && (
-          <div className="flex justify-between">
-            <span className="text-gray-600">Série:</span>
-            <code className="font-mono text-gray-900">{parsedData.serialNumber}</code>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

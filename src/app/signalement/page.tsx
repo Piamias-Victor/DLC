@@ -110,19 +110,7 @@ export default function SignalementPage() {
                 <BarcodeInput
                   onScan={handleScan}
                   autoFocus={true}
-                />
-                
-                {/* Code scanné */}
-                {formData.codeBarres && (
-                  <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                    <div className="text-xs font-medium text-blue-600 uppercase mb-1">
-                      Code produit
-                    </div>
-                    <div className="font-mono text-lg text-blue-900">
-                      {formData.codeBarres}
-                    </div>
-                  </div>
-                )}
+                />                
 
                 {/* Quantité et Date */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
