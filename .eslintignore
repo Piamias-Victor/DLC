@@ -1,0 +1,13 @@
+# Contenu complet de .eslintignore
+echo "node_modules/
+.next/
+out/
+build/
+.vercel/
+**/.prisma/
+**/prisma/migrations/
+prisma/generated/
+src/generated/
+**/generated/
+*.wasm.js
+**/*.generated.*" > .eslintignore

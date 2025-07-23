@@ -74,3 +74,27 @@ export interface ErrorEvent {
   timestamp: Date;
   context?: string;
 }
+
+export interface Signalement {
+  id: string;
+  codeBarres: string;
+  quantite: number;
+  datePeremption: Date;
+  commentaire: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface SignalementCreateData {
+  codeBarres: string;
+  quantite: number;
+  datePeremption: Date;
+  commentaire?: string;
+}
+
+export interface SignalementUpdateData {
+  codeBarres?: string;
+  quantite?: number;
+  datePeremption?: Date;
+  commentaire?: string;
+}

@@ -2,14 +2,13 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Package, Calendar, Hash } from 'lucide-react';
-
-import { SignalementData, SignalementWithId } from '@/lib/types';
-import { ParsedCode } from '@/lib/types';
+import { Package, Calendar, Hash, Trash2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { Card, CardHeader, CardContent } from '@/components/atoms/Card';
 import { Input } from '@/components/atoms/Input';
 import { BarcodeInput } from '@/components/molecules/BarcodeInput';
+import { useSignalements, useCreateSignalement, useDeleteSignalement } from '@/lib/hooks/useSignalements';
+import type { SignalementData, ParsedCode } from '@/lib/types';
 
 export default function SignalementPage() {
   const [formData, setFormData] = useState<SignalementData>({
@@ -19,11 +18,16 @@ export default function SignalementPage() {
     commentaire: ''
   });
   
-  const [historique, setHistorique] = useState<SignalementWithId[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [shouldRefocus, setShouldRefocus] = useState(false);
   const [clearTrigger, setClearTrigger] = useState(0);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
+
+  // Hooks React Query
+  const { data: signalementsData, isLoading: isLoadingList, error: errorList } = useSignalements();
+  const createMutation = useCreateSignalement();
+  const deleteMutation = useDeleteSignalement();
+
+  const signalements = signalementsData?.data || [];
 
   const handleScan = (code: string, parsedData?: ParsedCode) => {
     let processedCode = code;
@@ -55,42 +59,50 @@ export default function SignalementPage() {
     }
 
     setShouldRefocus(true);
-    setIsLoading(true);
     
-    // Simulation envoi
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const newSignalement: SignalementWithId = {
-      ...formData,
-      id: `SIG-${Date.now()}`,
-      timestamp: new Date().toLocaleTimeString('fr-FR')
-    };
-
-    setHistorique(prev => [newSignalement, ...prev]);
-    
-    // Reset form
-    setFormData({
-      codeBarres: '',
-      quantite: '',
-      datePeremption: '',
-      commentaire: ''
-    });
-    
-    // Déclencher le clear de l'input
-    setClearTrigger(prev => prev + 1);
-    
-    setIsLoading(false);
+    try {
+      await createMutation.mutateAsync({
+        codeBarres: formData.codeBarres.trim(),
+        quantite: parseInt(formData.quantite),
+        datePeremption: new Date(formData.datePeremption),
+        commentaire: formData.commentaire?.trim() || undefined
+      });
+      
+      // Reset form après succès
+      setFormData({
+        codeBarres: '',
+        quantite: '',
+        datePeremption: '',
+        commentaire: ''
+      });
+      
+      // Déclencher le clear de l'input
+      setClearTrigger(prev => prev + 1);
+      
+    } catch (error) {
+      console.error('Erreur création signalement:', error);
+    }
   };
 
-  // Effect pour remettre le focus quand isLoading passe de true à false
+  const handleDelete = async (id: string) => {
+    if (confirm('Supprimer ce signalement ?')) {
+      try {
+        await deleteMutation.mutateAsync(id);
+      } catch (error) {
+        console.error('Erreur suppression:', error);
+      }
+    }
+  };
+
+  // Effect pour remettre le focus quand la mutation se termine
   useEffect(() => {
-    if (!isLoading && shouldRefocus) {
+    if (!createMutation.isPending && shouldRefocus) {
       setTimeout(() => {
         barcodeInputRef.current?.focus();
         setShouldRefocus(false);
       }, 200);
     }
-  }, [isLoading, shouldRefocus]);
+  }, [createMutation.isPending, shouldRefocus]);
 
   const isFormValid = formData.codeBarres.trim() && 
                       formData.quantite.trim() && 
@@ -156,17 +168,40 @@ export default function SignalementPage() {
                   />
                 </div>
 
+                {/* Commentaire */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Commentaire (optionnel)
+                  </label>
+                  <textarea
+                    value={formData.commentaire}
+                    onChange={(e) => {
+                      setFormData(prev => ({ ...prev, commentaire: e.target.value }));
+                    }}
+                    placeholder="Informations complémentaires..."
+                    rows={3}
+                    className="w-full px-3 py-2.5 text-sm bg-white border border-gray-300 rounded-lg shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors duration-200 resize-none"
+                  />
+                </div>
+
                 {/* Submit */}
                 <Button
                   type="submit"
                   variant="primary"
                   size="lg"
-                  isLoading={isLoading}
+                  isLoading={createMutation.isPending}
                   disabled={!isFormValid}
                   className="w-full"
                 >
                   Envoyer Signalement
                 </Button>
+
+                {/* Erreur */}
+                {createMutation.error && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                    {createMutation.error.message}
+                  </div>
+                )}
 
               </form>
             </CardContent>
@@ -175,21 +210,42 @@ export default function SignalementPage() {
           {/* Historique */}
           <Card>
             <CardHeader
-              title={`Historique (${historique.length})`}
-              subtitle="Signalements envoyés"
+              title={`Historique (${signalements.length})`}
+              subtitle="Signalements enregistrés"
               icon={<Package className="w-6 h-6" />}
             />
 
             <CardContent>
-              {historique.length > 0 ? (
+              {isLoadingList ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+                  <span className="ml-3 text-gray-600">Chargement...</span>
+                </div>
+              ) : errorList ? (
+                <div className="text-center py-12 text-red-600">
+                  <p>Erreur de chargement</p>
+                  <p className="text-sm">{errorList.message}</p>
+                </div>
+              ) : signalements.length > 0 ? (
                 <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {historique.map((item) => (
+                  {signalements.map((item) => (
                     <div key={item.id} className="p-4 bg-gray-50 rounded-lg border">
                       <div className="flex items-center justify-between mb-3">
                         <code className="text-sm font-mono bg-white px-2 py-1 rounded">
                           {item.id}
                         </code>
-                        <span className="text-sm text-gray-500">{item.timestamp}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-500">
+                            {new Date(item.createdAt).toLocaleString('fr-FR')}
+                          </span>
+                          <button
+                            onClick={() => handleDelete(item.id)}
+                            disabled={deleteMutation.isPending}
+                            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                       
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
@@ -208,6 +264,13 @@ export default function SignalementPage() {
                           </div>
                         </div>
                       </div>
+
+                      {item.commentaire && (
+                        <div className="mt-3 pt-3 border-t border-gray-200">
+                          <span className="text-gray-600 text-sm">Commentaire:</span>
+                          <p className="text-gray-900 text-sm mt-1">{item.commentaire}</p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
