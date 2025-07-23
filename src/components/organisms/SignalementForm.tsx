@@ -1,4 +1,4 @@
-// src/components/forms/SignalementForm.tsx
+// src/components/organisms/SignalementForm.tsx
 'use client';
 
 import { useState } from 'react';
@@ -117,6 +117,12 @@ export function SignalementForm({
       commentaire: ''
     });
     setErrors({});
+    
+    // Remettre le focus sur l'input de scan après délai court
+    setTimeout(() => {
+      const scanInput = document.querySelector('input[placeholder*="code-barres"]') as HTMLInputElement;
+      scanInput?.focus();
+    }, 100);
   };
 
   // Calculer l'urgence basée sur la date
