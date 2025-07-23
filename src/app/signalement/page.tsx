@@ -64,7 +64,7 @@ export default function SignalementPage() {
       await createMutation.mutateAsync({
         codeBarres: formData.codeBarres.trim(),
         quantite: parseInt(formData.quantite),
-        datePeremption: new Date(formData.datePeremption),
+        datePeremption: formData.datePeremption, // Envoi string, transformation côté serveur
         commentaire: formData.commentaire?.trim() || undefined
       });
       

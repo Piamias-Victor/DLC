@@ -1,7 +1,18 @@
-// src/lib/hooks/useSignalements.ts
+// src/lib/hooks/useSignalements.ts - Version sans import Prisma
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SignalementCreateInput } from '@/lib/validations/signalement';
 import { Signalement } from '../types';
+
+// Types compatibles avec Prisma (sans import direct)
+interface SignalementFromDB {
+  id: string;
+  codeBarres: string;
+  quantite: number;
+  datePeremption: string; // ISO string depuis l'API
+  commentaire: string | null;
+  createdAt: string; // ISO string depuis l'API
+  updatedAt: string; // ISO string depuis l'API
+}
 
 // Types pour l'API
 interface SignalementsResponse {
@@ -23,7 +34,15 @@ const fetchSignalements = async (page = 1, limit = 20): Promise<SignalementsResp
   return response.json();
 };
 
-const createSignalement = async (data: SignalementCreateInput): Promise<Signalement> => {
+// Types pour l'input côté client
+interface SignalementCreateData {
+  codeBarres: string;
+  quantite: number;
+  datePeremption: string; // String depuis le formulaire
+  commentaire?: string;
+}
+
+const createSignalement = async (data: SignalementCreateData): Promise<Signalement> => {
   const response = await fetch('/api/signalements', {
     method: 'POST',
     headers: {
@@ -80,3 +99,6 @@ export function useDeleteSignalement() {
     },
   });
 }
+
+// Export du type Prisma pour usage dans les composants
+export type { Signalement };
