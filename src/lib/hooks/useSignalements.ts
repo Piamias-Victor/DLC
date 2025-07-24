@@ -1,18 +1,7 @@
-// src/lib/hooks/useSignalements.ts - Version sans import Prisma
+// src/lib/hooks/useSignalements.ts - Version mise à jour avec filtres et bulk update
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { SignalementCreateInput } from '@/lib/validations/signalement';
-import { Signalement } from '../types';
-
-// Types compatibles avec Prisma (sans import direct)
-interface SignalementFromDB {
-  id: string;
-  codeBarres: string;
-  quantite: number;
-  datePeremption: string; // ISO string depuis l'API
-  commentaire: string | null;
-  createdAt: string; // ISO string depuis l'API
-  updatedAt: string; // ISO string depuis l'API
-}
+import { SignalementCreateInput, DashboardFiltersInput, BulkUpdateStatusInput } from '@/lib/validations/signalement';
+import { Signalement, DashboardFilters } from '../types';
 
 // Types pour l'API
 interface SignalementsResponse {
@@ -23,11 +12,26 @@ interface SignalementsResponse {
     total: number;
     pages: number;
   };
+  filters: DashboardFilters;
 }
 
 // Fonctions API
-const fetchSignalements = async (page = 1, limit = 20): Promise<SignalementsResponse> => {
-  const response = await fetch(`/api/signalements?page=${page}&limit=${limit}`);
+const fetchSignalements = async (
+  page = 1, 
+  limit = 20, 
+  filters: Partial<DashboardFilters> = {}
+): Promise<SignalementsResponse> => {
+  const params = new URLSearchParams({
+    page: page.toString(),
+    limit: limit.toString(),
+    ...(filters.search && { search: filters.search }),
+    ...(filters.status && filters.status !== 'ALL' && { status: filters.status }),
+    ...(filters.urgency && filters.urgency !== 'ALL' && { urgency: filters.urgency }),
+    ...(filters.datePeremptionFrom && { datePeremptionFrom: filters.datePeremptionFrom }),
+    ...(filters.datePeremptionTo && { datePeremptionTo: filters.datePeremptionTo }),
+  });
+
+  const response = await fetch(`/api/signalements?${params}`);
   if (!response.ok) {
     throw new Error('Erreur lors du chargement des signalements');
   }
@@ -69,11 +73,33 @@ const deleteSignalement = async (id: string): Promise<void> => {
   }
 };
 
+// Nouvelle fonction pour le changement d'état en masse
+const bulkUpdateStatus = async (data: BulkUpdateStatusInput) => {
+  const response = await fetch('/api/signalements/bulk-update', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Erreur lors de la mise à jour');
+  }
+  
+  return response.json();
+};
+
 // Hooks
-export function useSignalements(page = 1, limit = 20) {
+export function useSignalements(
+  page = 1, 
+  limit = 20, 
+  filters: Partial<DashboardFilters> = {}
+) {
   return useQuery({
-    queryKey: ['signalements', page, limit],
-    queryFn: () => fetchSignalements(page, limit),
+    queryKey: ['signalements', page, limit, filters],
+    queryFn: () => fetchSignalements(page, limit, filters),
   });
 }
 
@@ -94,6 +120,18 @@ export function useDeleteSignalement() {
   
   return useMutation({
     mutationFn: deleteSignalement,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['signalements'] });
+    },
+  });
+}
+
+// Nouveau hook pour le changement d'état en masse
+export function useBulkUpdateStatus() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: bulkUpdateStatus,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['signalements'] });
     },

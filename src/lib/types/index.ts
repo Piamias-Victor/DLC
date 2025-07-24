@@ -1,6 +1,4 @@
-// src/lib/types/index.ts
-
-// Types de base pour les codes
+// src/lib/types/index.ts - Version mise à jour avec status
 export interface ParsedCode {
   originalCode: string;
   codeType: 'EAN13' | 'DATA_MATRIX' | 'UNKNOWN';
@@ -10,6 +8,11 @@ export interface ParsedCode {
   batchLot?: string;
   serialNumber?: string;
 }
+
+// Énumérations mises à jour
+export type UrgencyLevel = 'low' | 'medium' | 'high' | 'critical';
+export type SignalementStatus = 'EN_ATTENTE' | 'EN_COURS' | 'A_DESTOCKER' | 'DETRUIT';
+export type CodeType = 'EAN13' | 'DATA_MATRIX' | 'UNKNOWN';
 
 // Types métier signalement
 export interface SignalementData {
@@ -23,13 +26,52 @@ export interface SignalementWithId extends SignalementData {
   id: string;
   timestamp: string;
   urgency?: UrgencyLevel;
-  status?: SignalementStatus;
+  status: SignalementStatus;
 }
 
-// Énumérations
-export type UrgencyLevel = 'low' | 'medium' | 'high' | 'critical';
-export type SignalementStatus = 'pending' | 'processing' | 'completed' | 'cancelled';
-export type CodeType = 'EAN13' | 'DATA_MATRIX' | 'UNKNOWN';
+// Type pour le signalement complet (depuis DB)
+export interface Signalement {
+  id: string;
+  codeBarres: string;
+  quantite: number;
+  datePeremption: Date | string;
+  commentaire: string | null;
+  status: SignalementStatus;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+// Types pour les filtres
+export interface DashboardFilters {
+  search: string;
+  status: SignalementStatus | 'ALL';
+  urgency: UrgencyLevel | 'ALL';
+  datePeremptionFrom: string;
+  datePeremptionTo: string;
+}
+
+// Types pour la sélection multiple
+export interface BulkUpdateRequest {
+  signalementIds: string[];
+  newStatus: SignalementStatus;
+}
+
+// Types pour l'historique (si besoin plus tard)
+export interface StatusChangeLog {
+  signalementId: string;
+  fromStatus: SignalementStatus;
+  toStatus: SignalementStatus;
+  changedAt: Date;
+  changedBy?: string;
+}
+
+// Configuration des statuts
+export interface StatusConfig {
+  value: SignalementStatus;
+  label: string;
+  color: 'gray' | 'blue' | 'orange' | 'green' | 'red';
+  description: string;
+}
 
 // Types UI
 export type FormErrors<T> = {
@@ -40,16 +82,6 @@ export interface UIState {
   isLoading: boolean;
   error: string | null;
   success: boolean;
-}
-
-// Types pour les parseurs
-export interface GS1ApplicationIdentifier {
-  ai: string;
-  description: string;
-  fixedLength?: number;
-  minLength?: number;
-  maxLength?: number;
-  pattern?: RegExp;
 }
 
 // Types de configuration
@@ -75,16 +107,6 @@ export interface ErrorEvent {
   context?: string;
 }
 
-export interface Signalement {
-  id: string;
-  codeBarres: string;
-  quantite: number;
-  datePeremption: Date;
-  commentaire: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 export interface SignalementCreateData {
   codeBarres: string;
   quantite: number;
@@ -97,4 +119,15 @@ export interface SignalementUpdateData {
   quantite?: number;
   datePeremption?: Date;
   commentaire?: string;
+  status?: SignalementStatus;
+}
+
+// Types pour les parseurs (inchangés)
+export interface GS1ApplicationIdentifier {
+  ai: string;
+  description: string;
+  fixedLength?: number;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: RegExp;
 }
