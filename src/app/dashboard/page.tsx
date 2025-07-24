@@ -62,22 +62,20 @@ export default function DashboardPage() {
   };
 
   const handleExport = () => {
-    const csvContent = [
-      ['Code', 'Quantité', 'Date Péremption', 'Commentaire', 'Créé le'].join(','),
-      ...filteredSignalements.map(item => [
-        item.codeBarres,
-        item.quantite,
-        new Date(item.datePeremption).toLocaleDateString('fr-FR'),
-        item.commentaire || '',
-        new Date(item.createdAt).toLocaleDateString('fr-FR')
-      ].join(','))
-    ].join('\n');
+    // CSV simple : code;quantité (sans en-tête)
+    const csvContent = filteredSignalements.map(item => [
+      item.codeBarres,    // Code EAN13
+      item.quantite       // Quantité
+    ].join(';')).join('\n');
     
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const blob = new Blob([csvContent], { 
+      type: 'text/csv;charset=utf-8' 
+    });
+    
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `signalements-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `export-${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
