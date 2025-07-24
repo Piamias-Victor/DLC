@@ -62,11 +62,19 @@ export default function DashboardPage() {
   };
 
   const handleExport = () => {
-    // CSV simple : code;quantité (sans en-tête)
-    const csvContent = filteredSignalements.map(item => [
-      item.codeBarres,    // Code EAN13
-      item.quantite       // Quantité
-    ].join(';')).join('\n');
+    // CSV format alternant : code;quantité puis date péremption
+    const csvLines: string[] = [];
+    
+    filteredSignalements.forEach(item => {
+      // Ligne 1 : code;quantité
+      csvLines.push(`${item.codeBarres};${item.quantite}`);
+      
+      // Ligne 2 : date péremption (format DD/MM/YYYY)
+      const datePeremption = new Date(item.datePeremption).toLocaleDateString('fr-FR');
+      csvLines.push(datePeremption);
+    });
+    
+    const csvContent = csvLines.join('\n');
     
     const blob = new Blob([csvContent], { 
       type: 'text/csv;charset=utf-8' 
