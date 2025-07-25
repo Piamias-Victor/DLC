@@ -1,4 +1,4 @@
-// src/lib/validations/signalement.ts - Mise à jour avec status
+// src/lib/validations/signalement.ts - Mise à jour avec filtres quantité
 import { z } from 'zod';
 
 const SignalementStatusEnum = z.enum(['EN_ATTENTE', 'EN_COURS', 'A_DESTOCKER', 'DETRUIT']);
@@ -18,13 +18,15 @@ export const SignalementCreateSchema = z.object({
 
 export const SignalementUpdateSchema = SignalementCreateSchema.partial();
 
-// Schema pour les filtres
+// Schema pour les filtres - MISE À JOUR
 export const DashboardFiltersSchema = z.object({
   search: z.string().optional().default(''),
   status: z.union([SignalementStatusEnum, z.literal('ALL')]).optional().default('ALL'),
   urgency: z.enum(['low', 'medium', 'high', 'critical', 'ALL']).optional().default('ALL'),
   datePeremptionFrom: z.string().optional().default(''),
   datePeremptionTo: z.string().optional().default(''),
+  quantiteMin: z.string().optional().default(''),  // NOUVEAU
+  quantiteMax: z.string().optional().default(''),  // NOUVEAU
 });
 
 // Schema pour le changement d'état en masse

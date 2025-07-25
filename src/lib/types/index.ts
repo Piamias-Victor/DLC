@@ -1,4 +1,4 @@
-// src/lib/types/index.ts - Version mise à jour avec status
+// src/lib/types/index.ts - Version mise à jour avec filtre quantité
 export interface ParsedCode {
   originalCode: string;
   codeType: 'EAN13' | 'DATA_MATRIX' | 'UNKNOWN';
@@ -41,13 +41,15 @@ export interface Signalement {
   updatedAt: Date | string;
 }
 
-// Types pour les filtres
+// Types pour les filtres - MISE À JOUR
 export interface DashboardFilters {
   search: string;
   status: SignalementStatus | 'ALL';
   urgency: UrgencyLevel | 'ALL';
   datePeremptionFrom: string;
   datePeremptionTo: string;
+  quantiteMin: string;  // NOUVEAU
+  quantiteMax: string;  // NOUVEAU
 }
 
 // Types pour la sélection multiple

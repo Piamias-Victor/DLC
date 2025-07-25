@@ -1,4 +1,4 @@
-// src/lib/hooks/useSignalements.ts - Version mise à jour avec filtres et bulk update
+// src/lib/hooks/useSignalements.ts - Version mise à jour avec filtre quantité
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SignalementCreateInput, DashboardFiltersInput, BulkUpdateStatusInput } from '@/lib/validations/signalement';
 import { Signalement, DashboardFilters } from '../types';
@@ -15,7 +15,7 @@ interface SignalementsResponse {
   filters: DashboardFilters;
 }
 
-// Fonctions API
+// Fonctions API - MISE À JOUR
 const fetchSignalements = async (
   page = 1, 
   limit = 20, 
@@ -29,6 +29,8 @@ const fetchSignalements = async (
     ...(filters.urgency && filters.urgency !== 'ALL' && { urgency: filters.urgency }),
     ...(filters.datePeremptionFrom && { datePeremptionFrom: filters.datePeremptionFrom }),
     ...(filters.datePeremptionTo && { datePeremptionTo: filters.datePeremptionTo }),
+    ...(filters.quantiteMin && { quantiteMin: filters.quantiteMin }),  // NOUVEAU
+    ...(filters.quantiteMax && { quantiteMax: filters.quantiteMax }),  // NOUVEAU
   });
 
   const response = await fetch(`/api/signalements?${params}`);
@@ -73,7 +75,7 @@ const deleteSignalement = async (id: string): Promise<void> => {
   }
 };
 
-// Nouvelle fonction pour le changement d'état en masse
+// Fonction pour le changement d'état en masse
 const bulkUpdateStatus = async (data: BulkUpdateStatusInput) => {
   const response = await fetch('/api/signalements/bulk-update', {
     method: 'POST',
@@ -126,7 +128,7 @@ export function useDeleteSignalement() {
   });
 }
 
-// Nouveau hook pour le changement d'état en masse
+// Hook pour le changement d'état en masse
 export function useBulkUpdateStatus() {
   const queryClient = useQueryClient();
   

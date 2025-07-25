@@ -1,10 +1,9 @@
-// src/app/api/signalements/route.ts - Mise à jour avec filtres
+// src/app/api/signalements/route.ts - Mise à jour avec filtre quantité
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma/client';
 import { SignalementCreateSchema, DashboardFiltersSchema } from '@/lib/validations/signalement';
 import { parseCode } from '@/lib/utils/codeParser';
 import { z } from 'zod';
-import { Prisma } from '@prisma/client';
 
 // GET /api/signalements - Liste des signalements avec filtres
 export async function GET(request: NextRequest) {
@@ -23,6 +22,8 @@ export async function GET(request: NextRequest) {
       urgency: searchParams.get('urgency') || 'ALL',
       datePeremptionFrom: searchParams.get('datePeremptionFrom') || '',
       datePeremptionTo: searchParams.get('datePeremptionTo') || '',
+      quantiteMin: searchParams.get('quantiteMin') || '',
+      quantiteMax: searchParams.get('quantiteMax') || '',
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -54,6 +55,19 @@ export async function GET(request: NextRequest) {
         const endDate = new Date(filters.datePeremptionTo);
         endDate.setHours(23, 59, 59, 999);
         whereConditions.datePeremption.lte = endDate;
+      }
+    }
+
+    // NOUVEAU : Filtre par quantité
+    if (filters.quantiteMin || filters.quantiteMax) {
+      whereConditions.quantite = {};
+      
+      if (filters.quantiteMin && !isNaN(parseInt(filters.quantiteMin))) {
+        whereConditions.quantite.gte = parseInt(filters.quantiteMin);
+      }
+      
+      if (filters.quantiteMax && !isNaN(parseInt(filters.quantiteMax))) {
+        whereConditions.quantite.lte = parseInt(filters.quantiteMax);
       }
     }
 

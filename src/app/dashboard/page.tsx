@@ -1,4 +1,4 @@
-// src/app/dashboard/page.tsx - Version complète et propre
+// src/app/dashboard/page.tsx - Version complète avec filtre quantité
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -52,21 +52,35 @@ export default function DashboardPage() {
     status: 'ALL',
     urgency: 'ALL',
     datePeremptionFrom: '',
-    datePeremptionTo: ''
+    datePeremptionTo: '',
+    quantiteMin: '',
+    quantiteMax: ''
   });
   
-  // Debounce pour la recherche (500ms)
+  // Debounce pour les champs de saisie
   const debouncedSearch = useDebounce(filters.search, 500);
   const debouncedDateFrom = useDebounce(filters.datePeremptionFrom, 800);
   const debouncedDateTo = useDebounce(filters.datePeremptionTo, 800);
+  const debouncedQuantiteMin = useDebounce(filters.quantiteMin, 800);
+  const debouncedQuantiteMax = useDebounce(filters.quantiteMax, 800);
   
   // Filtres finaux avec debounce
   const finalFilters = useMemo(() => ({
     ...filters,
     search: debouncedSearch,
     datePeremptionFrom: debouncedDateFrom,
-    datePeremptionTo: debouncedDateTo
-  }), [filters.status, filters.urgency, debouncedSearch, debouncedDateFrom, debouncedDateTo]);
+    datePeremptionTo: debouncedDateTo,
+    quantiteMin: debouncedQuantiteMin,
+    quantiteMax: debouncedQuantiteMax
+  }), [
+    filters.status, 
+    filters.urgency, 
+    debouncedSearch, 
+    debouncedDateFrom, 
+    debouncedDateTo,
+    debouncedQuantiteMin,
+    debouncedQuantiteMax
+  ]);
   
   // États de l'interface
   const [showFilters, setShowFilters] = useState(false);
@@ -150,7 +164,9 @@ export default function DashboardPage() {
       status: 'ALL',
       urgency: 'ALL',
       datePeremptionFrom: '',
-      datePeremptionTo: ''
+      datePeremptionTo: '',
+      quantiteMin: '',
+      quantiteMax: ''
     });
   };
 
@@ -168,11 +184,13 @@ export default function DashboardPage() {
   // Export CSV
   const handleExport = () => {
     const csvLines: string[] = [];
+    csvLines.push('Code-Barres;Quantité;Date Péremption;Statut;Commentaire;Créé le');
     
     signalements.forEach(item => {
-      csvLines.push(`${item.codeBarres};${item.quantite}`);
       const datePeremption = new Date(item.datePeremption).toLocaleDateString('fr-FR');
-      csvLines.push(datePeremption);
+      const createdAt = new Date(item.createdAt).toLocaleDateString('fr-FR');
+      const commentaire = item.commentaire ? item.commentaire.replace(/;/g, ',') : '';
+      csvLines.push(`${item.codeBarres};${item.quantite};${datePeremption};${STATUS_CONFIG[item.status].label};${commentaire};${createdAt}`);
     });
     
     const csvContent = csvLines.join('\n');
@@ -180,12 +198,15 @@ export default function DashboardPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `export-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `signalements-${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
+  // Vérifier si des filtres sont actifs
+  const hasActiveFilters = Object.values(finalFilters).some(f => f && f !== 'ALL');
 
   if (isLoading) {
     return (
@@ -323,8 +344,7 @@ export default function DashboardPage() {
                     <Filter className="w-4 h-4" />
                     {showFilters ? 'Masquer' : 'Filtres'}
                   </Button>
-                  {(filters.search || filters.status !== 'ALL' || filters.urgency !== 'ALL' || 
-                    filters.datePeremptionFrom || filters.datePeremptionTo) && (
+                  {hasActiveFilters && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -340,7 +360,8 @@ export default function DashboardPage() {
             
             {showFilters && (
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                {/* Première ligne de filtres */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                   {/* Recherche */}
                   <div>
                     <Input
@@ -399,7 +420,10 @@ export default function DashboardPage() {
                       <p className="text-xs text-gray-500 mt-1">Mise à jour...</p>
                     )}
                   </div>
+                </div>
 
+                {/* Deuxième ligne de filtres */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   {/* Date de péremption à */}
                   <div>
                     <Input
@@ -412,12 +436,45 @@ export default function DashboardPage() {
                       <p className="text-xs text-gray-500 mt-1">Mise à jour...</p>
                     )}
                   </div>
+
+                  {/* Quantité minimum */}
+                  <div>
+                    <Input
+                      type="number"
+                      placeholder="Quantité min"
+                      value={filters.quantiteMin}
+                      onChange={(e) => updateFilter('quantiteMin', e.target.value)}
+                      leftIcon={<Hash className="w-4 h-4" />}
+                      min="1"
+                    />
+                    {filters.quantiteMin && debouncedQuantiteMin !== filters.quantiteMin && (
+                      <p className="text-xs text-gray-500 mt-1">Mise à jour...</p>
+                    )}
+                  </div>
+
+                  {/* Quantité maximum */}
+                  <div>
+                    <Input
+                      type="number"
+                      placeholder="Quantité max"
+                      value={filters.quantiteMax}
+                      onChange={(e) => updateFilter('quantiteMax', e.target.value)}
+                      leftIcon={<Hash className="w-4 h-4" />}
+                      min="1"
+                    />
+                    {filters.quantiteMax && debouncedQuantiteMax !== filters.quantiteMax && (
+                      <p className="text-xs text-gray-500 mt-1">Mise à jour...</p>
+                    )}
+                  </div>
+
+                  {/* Espace vide pour alignement */}
+                  <div></div>
                 </div>
               </CardContent>
             )}
           </Card>
 
-          {/* Actions groupées - Nouveau design */}
+          {/* Actions groupées */}
           {selectedIds.length > 0 && (
             <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 shadow-lg">
               <CardContent className="p-6">
@@ -482,7 +539,7 @@ export default function DashboardPage() {
             <CardHeader
               title={`Signalements (${signalements.length})`}
               subtitle={
-                Object.values(finalFilters).some(f => f && f !== 'ALL') 
+                hasActiveFilters 
                   ? "Résultats filtrés" 
                   : "Tous les signalements"
               }
@@ -553,6 +610,7 @@ export default function DashboardPage() {
                               <button
                                 onClick={() => setSelectedSignalement(item)}
                                 className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                                title="Voir détail"
                               >
                                 <Eye className="w-4 h-4" />
                               </button>
@@ -560,6 +618,7 @@ export default function DashboardPage() {
                                 onClick={() => handleDelete(item.id)}
                                 disabled={deleteMutation.isPending}
                                 className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                                title="Supprimer"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -575,7 +634,10 @@ export default function DashboardPage() {
                   <Package className="w-12 h-12 mx-auto mb-3 opacity-30" />
                   <p>Aucun signalement trouvé</p>
                   <p className="text-sm mt-1">
-                    Modifiez vos filtres ou créez un nouveau signalement
+                    {hasActiveFilters 
+                      ? 'Modifiez vos filtres ou créez un nouveau signalement'
+                      : 'Créez votre premier signalement'
+                    }
                   </p>
                 </div>
               )}
