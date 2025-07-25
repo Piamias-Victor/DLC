@@ -1,4 +1,4 @@
-// src/components/molecules/BarcodeInput.tsx
+// src/components/molecules/BarcodeInput.tsx - Version simplifiée
 'use client';
 
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
@@ -15,7 +15,7 @@ interface BarcodeInputProps {
   autoFocus?: boolean;
   className?: string;
   label?: string;
-  clearTrigger?: number; // Prop pour déclencher le clear
+  clearTrigger?: number;
 }
 
 export const BarcodeInput = forwardRef<HTMLInputElement, BarcodeInputProps>(
@@ -33,9 +33,9 @@ export const BarcodeInput = forwardRef<HTMLInputElement, BarcodeInputProps>(
     const [isValid, setIsValid] = useState<boolean | null>(null);
     const [parsedData, setParsedData] = useState<ParsedCode | null>(null);
     const [error, setError] = useState<string>('');
+    const [debugInfo, setDebugInfo] = useState<string[]>([]);
     const internalInputRef = useRef<HTMLInputElement>(null);
 
-    // Expose la ref de l'input interne
     useImperativeHandle(ref, () => internalInputRef.current!, []);
 
     const validateAndParse = (code: string) => {
@@ -59,14 +59,24 @@ export const BarcodeInput = forwardRef<HTMLInputElement, BarcodeInputProps>(
       }
     };
 
+    // SIMPLE : Juste l'événement input natif comme pour quantité
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const newValue = e.target.value;
+      setDebugInfo(prev => [...prev.slice(-3), `Change: "${newValue}" (${newValue.length})`]);
       setValue(newValue);
-      validateAndParse(newValue);
+      
+      // Auto-traitement si assez long (scan rapide)
+      if (newValue.length >= 8) {
+        validateAndParse(newValue);
+      }
     };
 
+    // Enter pour forcer le traitement
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter' && value.trim() && isValid) {
+      setDebugInfo(prev => [...prev.slice(-3), `Key: ${e.key}`]);
+      
+      if (e.key === 'Enter' && value.trim() && value.length >= 8) {
+        validateAndParse(value);
         handleClear();
       }
     };
@@ -76,40 +86,27 @@ export const BarcodeInput = forwardRef<HTMLInputElement, BarcodeInputProps>(
       setIsValid(null);
       setParsedData(null);
       setError('');
+      setDebugInfo([]);
       internalInputRef.current?.focus();
     };
 
-    const handleFocus = () => {
-      internalInputRef.current?.select();
-    };
-
-    // Effect pour l'autofocus initial
+    // Autofocus
     useEffect(() => {
       if (autoFocus && internalInputRef.current) {
         internalInputRef.current.focus();
       }
     }, [autoFocus]);
 
-    // Effect pour vider l'input quand clearTrigger change
+    // Clear trigger
     useEffect(() => {
       if (clearTrigger > 0) {
         setValue('');
         setIsValid(null);
         setParsedData(null);
         setError('');
+        setDebugInfo([]);
       }
     }, [clearTrigger]);
-
-    const getCodeTypeConfig = (type: ParsedCode['codeType']) => {
-      switch (type) {
-        case 'EAN13':
-          return { variant: 'primary' as const, label: 'EAN13' };
-        case 'DATA_MATRIX':
-          return { variant: 'info' as const, label: 'Data Matrix' };
-        default:
-          return { variant: 'default' as const, label: 'Inconnu' };
-      }
-    };
 
     const rightIcon = value ? (
       <button
@@ -121,8 +118,6 @@ export const BarcodeInput = forwardRef<HTMLInputElement, BarcodeInputProps>(
       </button>
     ) : null;
 
-    const leftIcon = <ScanLine className="w-5 h-5" />;
-
     return (
       <div className={`space-y-3 ${className}`}>
         <Input
@@ -131,39 +126,36 @@ export const BarcodeInput = forwardRef<HTMLInputElement, BarcodeInputProps>(
           value={value}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          onFocus={handleFocus}
           placeholder={placeholder}
-          leftIcon={leftIcon}
+          leftIcon={<ScanLine className="w-5 h-5" />}
           rightIcon={rightIcon}
           variant={isValid === false ? 'error' : isValid === true ? 'success' : 'default'}
           error={error}
           className="font-mono text-base"
         />
 
-        {/* Status & Info */}
+        {/* Debug visuel */}
+        {debugInfo.length > 0 && (
+          <div className="p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+            <p className="font-medium">Debug:</p>
+            {debugInfo.map((info, i) => (
+              <p key={i} className="text-gray-600">{info}</p>
+            ))}
+          </div>
+        )}
+
+        {/* Status */}
         <div className="flex items-center justify-between text-sm">
           <span className="text-gray-500">
-            {value.length > 0 
-              ? `${value.length} caractères` 
-              : 'En attente de scan...'
-            }
+            {value.length > 0 ? `${value.length} caractères` : 'En attente...'}
           </span>
           
           <div className="flex items-center gap-2">
-            {isValid === true && (
-              <CheckCircle className="w-4 h-4 text-green-500" />
-            )}
-            
-            {isValid === false && (
-              <AlertCircle className="w-4 h-4 text-red-500" />
-            )}
-            
+            {isValid === true && <CheckCircle className="w-4 h-4 text-green-500" />}
+            {isValid === false && <AlertCircle className="w-4 h-4 text-red-500" />}
             {parsedData && (
-              <Badge 
-                variant={getCodeTypeConfig(parsedData.codeType).variant}
-                size="sm"
-              >
-                {getCodeTypeConfig(parsedData.codeType).label}
+              <Badge variant="primary" size="sm">
+                {parsedData.codeType}
               </Badge>
             )}
           </div>
