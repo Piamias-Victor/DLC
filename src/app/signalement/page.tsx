@@ -136,13 +136,19 @@ export default function SignalementPage() {
               <form onSubmit={handleSubmit} className="space-y-6">
                 
                 {/* Scanner */}
-                <BarcodeInput
+                {/* <BarcodeInput
                   ref={barcodeInputRef}
                   onScan={handleScan}
                   autoFocus={true}
                   clearTrigger={clearTrigger}
-                />                
+                />                 */}
 
+<input 
+  type="text" 
+  placeholder="Test direct Zebra"
+  onChange={(e) => console.log('Direct input:', e.target.value)}
+  className="w-full p-2 border rounded"
+/>
                 {/* Quantité et Date */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
