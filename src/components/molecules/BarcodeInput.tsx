@@ -91,11 +91,7 @@ export const BarcodeInput = forwardRef<HTMLInputElement, BarcodeInputProps>(
      if (e.key === 'Enter' && value.trim()) {
        e.preventDefault();
        if (value.length >= 8) {
-         validateAndParse(value);
-         // Auto-clear après scan réussi
-         if (isValid !== false) {
-           setTimeout(() => handleClear(), 500);
-         }
+         validateAndParse(value);         
        }
      }
    };
