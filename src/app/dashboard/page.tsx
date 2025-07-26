@@ -183,27 +183,28 @@ export default function DashboardPage() {
 
   // Export CSV
   const handleExport = () => {
-    const csvLines: string[] = [];
-    csvLines.push('Code-Barres;Quantité;Date Péremption;Statut;Commentaire;Créé le');
+  const csvLines: string[] = [];
+  
+  signalements.forEach(item => {
+    // Ligne 1 : Code EAN et quantité
+    csvLines.push(`Code ean = ${item.codeBarres};quantite ${item.quantite}`);
     
-    signalements.forEach(item => {
-      const datePeremption = new Date(item.datePeremption).toLocaleDateString('fr-FR');
-      const createdAt = new Date(item.createdAt).toLocaleDateString('fr-FR');
-      const commentaire = item.commentaire ? item.commentaire.replace(/;/g, ',') : '';
-      csvLines.push(`${item.codeBarres};${item.quantite};${datePeremption};${STATUS_CONFIG[item.status].label};${commentaire};${createdAt}`);
-    });
-    
-    const csvContent = csvLines.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `signalements-${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+    // Ligne 2 : Date péremption
+    const datePeremption = new Date(item.datePeremption).toLocaleDateString('fr-FR');
+    csvLines.push(`ligne 2 : date peremption ${datePeremption}`);
+  });
+  
+  const csvContent = csvLines.join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `signalements-${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
 
   // Vérifier si des filtres sont actifs
   const hasActiveFilters = Object.values(finalFilters).some(f => f && f !== 'ALL');
