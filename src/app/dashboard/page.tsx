@@ -187,11 +187,11 @@ export default function DashboardPage() {
   
   signalements.forEach(item => {
     // Ligne 1 : Code EAN et quantité
-    csvLines.push(`Code ean = ${item.codeBarres};quantite ${item.quantite}`);
+    csvLines.push(`${item.codeBarres}; ${item.quantite}`);
     
     // Ligne 2 : Date péremption
     const datePeremption = new Date(item.datePeremption).toLocaleDateString('fr-FR');
-    csvLines.push(`ligne 2 : date peremption ${datePeremption}`);
+    csvLines.push(datePeremption);
   });
   
   const csvContent = csvLines.join('\n');
