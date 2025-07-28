@@ -77,12 +77,31 @@ export class RotationService {
       const { ean13, rotationMensuelle } = data[i];
       
       try {
-        // Validation EAN13
-        if (!ean13 || ean13.trim().length === 0) {
+        // Validation EAN13 après nettoyage
+        if (!ean13 || ean13.length === 0) {
           result.errors.push({
             line: i + 1,
-            ean13: ean13 || '',
-            error: 'EAN13 manquant'
+            ean13: data[i].ean13 || '',
+            error: 'EAN13 vide après nettoyage'
+          });
+          continue;
+        }
+
+        // Validation longueur EAN13
+        if (ean13.length < 6) {
+          result.errors.push({
+            line: i + 1,
+            ean13: data[i].ean13,
+            error: `EAN13 trop court: "${ean13}" (${ean13.length} caractères)`
+          });
+          continue;
+        }
+
+        if (ean13.length > 20) {
+          result.errors.push({
+            line: i + 1,
+            ean13: data[i].ean13,
+            error: `EAN13 trop long: "${ean13}" (${ean13.length} caractères)`
           });
           continue;
         }
@@ -164,7 +183,7 @@ export class RotationService {
   }
 
   /**
-   * Parse un CSV de rotations (inchangé)
+   * Parse un CSV de rotations avec nettoyage amélioré
    */
   static parseRotationCSV(csvContent: string): RotationImportData[] {
     const lines = csvContent.trim().split('\n');
@@ -181,17 +200,37 @@ export class RotationService {
       const separator = line.includes(';') ? ';' : 
                        line.includes('\t') ? '\t' : ',';
       
-      const [ean13, rotationStr] = line.split(separator).map(s => s.trim());
+      const parts = line.split(separator).map(s => s.trim());
       
-      if (ean13 && rotationStr) {
-        const rotation = parseFloat(rotationStr.replace(',', '.'));
-        data.push({
-          ean13, // ← Code original du CSV
-          rotationMensuelle: rotation
-        });
+      if (parts.length >= 2) {
+        let ean13 = parts[0].trim();
+        const rotationStr = parts[1].trim();
+        
+        // NETTOYER le code EAN13
+        // 1. Supprimer tous les espaces
+        ean13 = ean13.replace(/\s+/g, '');
+        
+        // 2. Garder seulement les chiffres
+        ean13 = ean13.replace(/[^0-9]/g, '');
+        
+        // 3. Tronquer si trop long (> 20 caractères)
+        if (ean13.length > 20) {
+          ean13 = ean13.substring(0, 13); // Garder les 13 premiers chiffres
+        }
+        
+        console.log(`🧹 Nettoyage: "${parts[0]}" → "${ean13}"`);
+        
+        if (ean13 && rotationStr) {
+          const rotation = parseFloat(rotationStr.replace(',', '.'));
+          data.push({
+            ean13,
+            rotationMensuelle: rotation
+          });
+        }
       }
     }
 
+    console.log(`📊 CSV parsé: ${data.length} lignes valides sur ${lines.length - startIndex} lignes`);
     return data;
   }
 
