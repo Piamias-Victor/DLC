@@ -29,7 +29,8 @@ export function UrgencyDisplay({
     low: { variant: 'success' as const, label: 'Faible', color: 'text-green-600' },
     medium: { variant: 'warning' as const, label: 'Moyen', color: 'text-orange-600' },
     high: { variant: 'error' as const, label: 'Élevé', color: 'text-red-600' },
-    critical: { variant: 'error' as const, label: 'Critique', color: 'text-red-700' }
+    critical: { variant: 'error' as const, label: 'Critique', color: 'text-red-700' },
+    ecoulement: { variant: 'success' as const, label: 'écoulement', color: 'text-cyan-700' }
   };
 
   const config = urgencyConfig[urgenceCalculee];

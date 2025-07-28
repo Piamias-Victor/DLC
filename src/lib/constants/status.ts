@@ -1,4 +1,4 @@
-// src/lib/constants/status.ts - Mise à jour avec A_VERIFIER
+// src/lib/constants/status.ts - Mise à jour avec ECOULEMENT
 import type { StatusConfig } from '@/lib/types';
 import type { Signalement } from '@prisma/client';
 
@@ -28,6 +28,12 @@ export const STATUS_CONFIG: Record<SignalementStatus, StatusConfig> = {
     label: 'À vérifier',
     color: 'orange',
     description: 'Probablement écoulé, contrôle terrain requis'
+  },
+  ECOULEMENT: {
+    value: 'ECOULEMENT',
+    label: 'Écoulement',
+    color: 'green',
+    description: 'Produit en cours d\'écoulement dans la pharmacie'
   },
   DETRUIT: {
     value: 'DETRUIT',
