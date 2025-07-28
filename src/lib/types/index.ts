@@ -13,7 +13,8 @@ export interface ParsedCode {
 
 // Types de base
 export type SignalementStatus = PrismaSignalement['status'];
-export type UrgencyLevel = 'low' | 'medium' | 'high' | 'critical';
+// src/lib/types/index.ts - UrgencyLevel mis à jour
+export type UrgencyLevel = 'low' | 'medium' | 'high' | 'critical' | 'ecoulement';
 export type CodeType = 'EAN13' | 'DATA_MATRIX' | 'UNKNOWN';
 
 // Types signalement
