@@ -1,9 +1,9 @@
-// src/app/api/rotations/import/route.ts
+// src/app/api/rotations/import/route.ts - Avec template normalisé
 import { NextRequest, NextResponse } from 'next/server';
 import { RotationService } from '@/lib/services/rotationService';
 import { UrgencyCalculator } from '@/lib/services/urgencyCalculator';
 
-// POST /api/rotations/import - Import CSV des rotations
+// POST /api/rotations/import - Import CSV avec normalisation EAN13
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -51,7 +51,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Importer les rotations
+    console.log(`📁 Import démarré: ${rotationData.length} lignes à traiter`);
+
+    // Importer les rotations (avec normalisation automatique)
     const importResult = await RotationService.importRotations(rotationData);
 
     // Recalculer les urgences pour les produits impactés
@@ -60,8 +62,10 @@ export async function POST(request: NextRequest) {
     
     if (recalculateUrgencies && importResult.success > 0) {
       try {
+        console.log('⚡ Début recalcul urgences...');
         const recalcResult = await UrgencyCalculator.recalculateAllUrgencies();
         recalculatedCount = recalcResult.processed;
+        console.log(`✅ Urgences recalculées: ${recalculatedCount}`);
       } catch (error) {
         console.warn('Erreur recalcul urgences après import:', error);
       }
@@ -76,6 +80,13 @@ export async function POST(request: NextRequest) {
         failed: importResult.errors.length,
         created: importResult.created,
         updated: importResult.updated
+      },
+      normalisation: {
+        message: 'Les codes EAN13 ont été automatiquement normalisés (suppression des zéros de tête)',
+        exemples: [
+          'CSV: "03400930029985" → Base: "3400930029985"',
+          'CSV: "0012345678901" → Base: "12345678901"'
+        ]
       }
     });
 
@@ -88,18 +99,15 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET /api/rotations/import - Template CSV
+// GET /api/rotations/import - Template CSV avec exemples normalisés
 export async function GET() {
   try {
-    // Générer un template CSV
-    const template = `ean13,rotationMensuelle
-1234567890123,25.5
-9876543210987,12.0
-5555555555555,8.75`;
+    // Template avec exemples de codes avec zéros de tête
+    const template = RotationService.generateTemplate();
 
     return new NextResponse(template, {
       headers: {
-        'Content-Type': 'text/csv',
+        'Content-Type': 'text/csv;charset=utf-8',
         'Content-Disposition': 'attachment; filename="template_rotations.csv"'
       }
     });
