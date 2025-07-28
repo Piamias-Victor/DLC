@@ -1,33 +1,35 @@
-// src/components/organisms/SignalementForm.tsx - Version refactorisée
-'use client';
-
-import { useRef, useEffect } from 'react';
+// src/components/signalement/SignalementFormContainer.tsx
+import { useState, useRef, useEffect } from 'react';
 import { Package, Calendar, Hash, Send } from 'lucide-react';
 import { Button } from '../atoms/Button';
 import { Card, CardHeader, CardContent } from '../atoms/Card';
 import { Input } from '../atoms/Input';
-import { Badge } from '../atoms/Badge';
 import { BarcodeInput } from '../molecules/BarcodeInput';
-import { CodeDisplay } from '../signalement/CodeDisplay';
-import { FormSummary } from '../signalement/FormSummary';
+import { CodeDisplay } from './CodeDisplay';
+import { FormSummary } from './FormSummary';
 import { useSignalementForm } from '@/hooks/useSignalementForm';
-import { ParsedCode, SignalementData } from '@/lib/types';
+import type { SignalementData, ParsedCode } from '@/lib/types';
 
-interface SignalementFormProps {
-  onSubmit: (data: SignalementData) => void;
-  onError?: (error: string) => void;
-  isLoading?: boolean;
-  className?: string;
-  clearTrigger?: number;
+interface SignalementFormContainerProps {
+  onSubmit: (data: SignalementCreateData) => Promise<void>;
+  isLoading: boolean;
+  error: string | null;
+  clearTrigger: number;
 }
 
-export function SignalementForm({ 
+interface SignalementCreateData {
+  codeBarres: string;
+  quantite: number;
+  datePeremption: string;
+  commentaire?: string;
+}
+
+export function SignalementFormContainer({ 
   onSubmit, 
-  onError, 
-  isLoading = false,
-  className = "",
-  clearTrigger = 0
-}: SignalementFormProps) {
+  isLoading, 
+  error,
+  clearTrigger 
+}: SignalementFormContainerProps) {
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   
   const {
@@ -38,17 +40,23 @@ export function SignalementForm({
     urgency,
     isFormValid,
     handleScan,
-    handleSubmit,
     updateField,
     setShouldRefocus
   } = useSignalementForm({
-    onSubmit,
-    onError,
+    onSubmit: async (data: SignalementData) => {
+      await onSubmit({
+        codeBarres: data.codeBarres.trim(),
+        quantite: parseInt(data.quantite),
+        datePeremption: data.datePeremption,
+        commentaire: data.commentaire?.trim() || undefined
+      });
+    },
+    onError: (error) => console.error(error),
     isLoading,
     clearTrigger
   });
 
-  // Effect pour remettre le focus quand isLoading passe de true à false
+  // Effect pour remettre le focus
   useEffect(() => {
     if (!isLoading && shouldRefocus) {
       setTimeout(() => {
@@ -58,34 +66,42 @@ export function SignalementForm({
     }
   }, [isLoading, shouldRefocus, setShouldRefocus]);
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!isFormValid) return;
+    
+    try {
+      await onSubmit({
+        codeBarres: formData.codeBarres.trim(),
+        quantite: parseInt(formData.quantite),
+        datePeremption: formData.datePeremption,
+        commentaire: formData.commentaire?.trim() || undefined
+      });
+    } catch (err) {
+      console.error('Erreur soumission:', err);
+    }
+  };
+
   return (
-    <Card className={`animate-fade-in ${className}`}>
+    <Card>
       <CardHeader
         title="Nouveau Signalement"
-        subtitle="Produit à date courte détecté"
         icon={<Package className="w-6 h-6 text-blue-600" />}
-        action={
-          showSuccess && (
-            <Badge variant="success" className="animate-scale-in">
-              Code scanné ✓
-            </Badge>
-          )
-        }
       />
 
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
           
-          {/* Scanner de code-barres */}
+          {/* Scanner */}
           <BarcodeInput
             ref={barcodeInputRef}
             onScan={handleScan}
-            onError={onError}
             autoFocus={true}
             clearTrigger={clearTrigger}
           />
-          
-          {/* Code actuel affiché */}
+
+          {/* Code affiché */}
           <CodeDisplay 
             codeBarres={formData.codeBarres}
             urgency={urgency}
@@ -98,7 +114,9 @@ export function SignalementForm({
               type="number"
               min="1"
               value={formData.quantite}
-              onChange={(e) => updateField('quantite', e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                updateField('quantite', e.target.value);
+              }}
               leftIcon={<Hash className="w-4 h-4" />}
               placeholder="Ex: 15"
               error={errors.quantite}
@@ -108,48 +126,58 @@ export function SignalementForm({
               label="Date de péremption"
               type="date"
               value={formData.datePeremption}
-              onChange={(e) => updateField('datePeremption', e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                updateField('datePeremption', e.target.value);
+              }}
               leftIcon={<Calendar className="w-4 h-4" />}
               error={errors.datePeremption}
             />
           </div>
 
-          {/* Commentaire optionnel */}
+          {/* Commentaire */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Commentaire (optionnel)
             </label>
             <textarea
               value={formData.commentaire}
-              onChange={(e) => updateField('commentaire', e.target.value)}
+              onChange={(e) => {
+                updateField('commentaire', e.target.value);
+              }}
               placeholder="Informations complémentaires..."
               rows={3}
               className="w-full px-3 py-2.5 text-sm bg-white border border-gray-300 rounded-lg shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors duration-200 resize-none"
             />
           </div>
 
-          {/* Bouton de soumission */}
+          {/* Submit */}
           <Button
             type="submit"
             variant="primary"
             size="lg"
             isLoading={isLoading}
-            loadingText="Envoi en cours..."
             disabled={!isFormValid}
             className="w-full"
           >
             <Send className="w-4 h-4" />
-            Envoyer le Signalement
+            Envoyer Signalement
           </Button>
 
-          {/* Résumé rapide */}
+          {/* Résumé */}
           <FormSummary
             quantite={formData.quantite}
             datePeremption={formData.datePeremption}
             urgency={urgency}
             isFormValid={isFormValid}
           />
-          
+
+          {/* Erreur */}
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              {error}
+            </div>
+          )}
+
         </form>
       </CardContent>
     </Card>
