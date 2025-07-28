@@ -1,4 +1,4 @@
-// src/lib/constants/status.ts - Avec A_VERIFIER
+// src/lib/constants/status.ts - Mise à jour avec A_VERIFIER
 import type { StatusConfig } from '@/lib/types';
 import type { Signalement } from '@prisma/client';
 
@@ -27,7 +27,7 @@ export const STATUS_CONFIG: Record<SignalementStatus, StatusConfig> = {
     value: 'A_VERIFIER',
     label: 'À vérifier',
     color: 'orange',
-    description: 'Signalement nécessitant une vérification'
+    description: 'Probablement écoulé, contrôle terrain requis'
   },
   DETRUIT: {
     value: 'DETRUIT',
@@ -67,3 +67,33 @@ export const STATUS_COLORS = {
     border: 'border-green-200'
   }
 } as const;
+
+// Configuration des niveaux d'urgence
+export const URGENCY_CONFIG = {
+  low: {
+    value: 'low',
+    label: 'Faible',
+    color: 'green',
+    description: 'Risque faible de perte'
+  },
+  medium: {
+    value: 'medium',
+    label: 'Moyen',
+    color: 'orange',
+    description: 'Surveiller régulièrement'
+  },
+  high: {
+    value: 'high',
+    label: 'Élevé',
+    color: 'red',
+    description: 'Action requise rapidement'
+  },
+  critical: {
+    value: 'critical',
+    label: 'Critique',
+    color: 'red',
+    description: 'Action immédiate nécessaire'
+  }
+} as const;
+
+export const URGENCY_OPTIONS = Object.values(URGENCY_CONFIG);

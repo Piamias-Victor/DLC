@@ -1,11 +1,12 @@
-// src/app/api/signalements/route.ts - GET mis à jour pour multi-sélection
+// src/app/api/signalements/route.ts - Mise à jour avec calcul d'urgence
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma/client';
 import { SignalementCreateSchema } from '@/lib/validations/signalement';
+import { UrgencyCalculator } from '@/lib/services/urgencyCalculator';
 import { parseCode } from '@/lib/utils/codeParser';
 import { z } from 'zod';
 
-// GET /api/signalements - Liste avec filtres multi-sélection
+// GET /api/signalements - Liste avec filtres étendus
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -30,10 +31,12 @@ export async function GET(request: NextRequest) {
       search: searchParams.get('search') || '',
       status: parseMultiSelectParam(searchParams.get('status')),
       urgency: parseMultiSelectParam(searchParams.get('urgency')),
+      urgenceCalculee: parseMultiSelectParam(searchParams.get('urgenceCalculee')),
       datePeremptionFrom: searchParams.get('datePeremptionFrom') || '',
       datePeremptionTo: searchParams.get('datePeremptionTo') || '',
       quantiteMin: searchParams.get('quantiteMin') || '',
       quantiteMax: searchParams.get('quantiteMax') || '',
+      avecRotation: searchParams.get('avecRotation') === 'true',
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -50,6 +53,24 @@ export async function GET(request: NextRequest) {
     // Filtre par statut multi-sélection
     if (filters.status !== 'ALL' && Array.isArray(filters.status) && filters.status.length > 0) {
       whereConditions.status = { in: filters.status };
+    }
+
+    // Filtre par urgence calculée
+    if (filters.urgenceCalculee !== 'ALL' && Array.isArray(filters.urgenceCalculee) && filters.urgenceCalculee.length > 0) {
+      whereConditions.urgenceCalculee = { in: filters.urgenceCalculee };
+    }
+
+    // Filtre rotation
+    if (filters.avecRotation) {
+      // Sous-requête pour vérifier existence rotation
+      const signalementsAvecRotation = await prisma.$queryRaw`
+        SELECT s.id 
+        FROM signalements s 
+        INNER JOIN product_rotations pr ON s."codeBarres" = pr.ean13
+      `;
+      
+      const idsAvecRotation = (signalementsAvecRotation as { id: number }[]).map(s => s.id);
+      whereConditions.id = { in: idsAvecRotation };
     }
 
     // Filtre par date de péremption
@@ -91,12 +112,12 @@ export async function GET(request: NextRequest) {
       prisma.signalement.count({ where: whereConditions })
     ]);
 
-    // Post-traitement pour le filtre d'urgence multi-sélection
+    // Post-traitement pour le filtre d'urgence classique (rétrocompatibilité)
     let filteredSignalements = signalements;
     
     if (filters.urgency !== 'ALL' && Array.isArray(filters.urgency) && filters.urgency.length > 0) {
       filteredSignalements = signalements.filter((s: { datePeremption: Date; quantite: number }) => {
-        const urgency = calculateUrgency(s.datePeremption, s.quantite);
+        const urgency = calculateClassicUrgency(s.datePeremption, s.quantite);
         return filters.urgency.includes(urgency);
       });
     }
@@ -120,7 +141,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST inchangé...
+// POST /api/signalements - Création avec calcul d'urgence automatique
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -137,6 +158,7 @@ export async function POST(request: NextRequest) {
       console.warn('Parsing code failed, using original:', err);
     }
 
+    // Créer le signalement
     const signalement = await prisma.signalement.create({
       data: {
         ...validatedData,
@@ -144,7 +166,22 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    return NextResponse.json(signalement, { status: 201 });
+    // Calcul automatique de l'urgence
+    try {
+      await UrgencyCalculator.updateSignalementUrgency(signalement.id);
+      
+      // Récupérer le signalement mis à jour
+      const updatedSignalement = await prisma.signalement.findUnique({
+        where: { id: signalement.id }
+      });
+      
+      return NextResponse.json(updatedSignalement || signalement, { status: 201 });
+    } catch (urgencyError) {
+      console.warn('Erreur calcul urgence:', urgencyError);
+      // Retourner le signalement même si le calcul d'urgence échoue
+      return NextResponse.json(signalement, { status: 201 });
+    }
+
   } catch (error) {
     console.error('Erreur POST signalement:', error);
     
@@ -162,11 +199,10 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Fonction utilitaire pour calculer l'urgence
-function calculateUrgency(datePeremption: Date, quantite: number): 'low' | 'medium' | 'high' | 'critical' {
+// Fonction utilitaire pour calculer l'urgence classique (rétrocompatibilité)
+function calculateClassicUrgency(datePeremption: Date, quantite: number): 'low' | 'medium' | 'high' | 'critical' {
   const today = new Date();
-  const expDate = new Date(datePeremption);
-  const diffDays = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  const diffDays = Math.ceil((datePeremption.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
   
   if (diffDays <= 30) return 'critical';
   if (quantite >= 50 && diffDays <= 120) return 'critical';

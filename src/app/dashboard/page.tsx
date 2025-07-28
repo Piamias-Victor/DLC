@@ -1,16 +1,21 @@
-// src/app/dashboard/page.tsx - Version refactorisée
+// src/app/dashboard/page.tsx - Version complète avec import rotations
 'use client';
 
-import { Download, AlertTriangle } from 'lucide-react';
+import { useState } from 'react';
+import { Download, AlertTriangle, Upload, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { DashboardStats } from '@/components/dashboard/DashboardStats';
 import { DashboardFiltersComponent } from '@/components/dashboard/DashboardFilters';
 import { BulkActions } from '@/components/dashboard/BulkActions';
 import { SignalementsTable } from '@/components/dashboard/SignalementsTable';
 import { ConfirmBulkActionModal } from '@/components/dashboard/ConfirmBulkActionModal';
+import { RotationImportModal } from '@/components/rotation/RotationImportModal';
 import { useDashboard } from '@/hooks/useDashboard';
+import { useRecalculateUrgencies } from '@/hooks/rotation/useRotations';
 
 export default function DashboardPage() {
+  const [showImportModal, setShowImportModal] = useState(false);
+  
   const {
     // États
     filters,
@@ -41,6 +46,26 @@ export default function DashboardPage() {
     setBulkAction,
     clearSelection
   } = useDashboard();
+
+  // Hook pour recalcul des urgences
+  const recalculateMutation = useRecalculateUrgencies();
+
+  const handleRecalculateAll = async () => {
+    if (confirm('Recalculer toutes les urgences ? Cela peut prendre quelques secondes.')) {
+      try {
+        const result = await recalculateMutation.mutateAsync({ all: true });
+        alert(`Recalcul terminé !\n- Traités: ${result.processed}\n- Avec rotation: ${result.withRotation}\n- Auto-vérifiés: ${result.autoVerified}`);
+      } catch (error) {
+        console.error('Erreur recalcul:', error);
+        alert('Erreur lors du recalcul des urgences');
+      }
+    }
+  };
+
+  const handleImportSuccess = () => {
+    setShowImportModal(false);
+    // Les données se rechargeront automatiquement grâce à React Query
+  };
 
   if (isLoading) {
     return (
@@ -77,10 +102,34 @@ export default function DashboardPage() {
                 Dashboard Signalements
               </h1>
               <p className="text-gray-600">
-                Vue d ensemble avec filtres et actions groupées
+                Vue d ensemble avec filtres, rotations et actions groupées
               </p>
             </div>
+            
             <div className="flex gap-3">
+              {/* Bouton Recalcul urgences */}
+              <Button 
+                variant="outline" 
+                onClick={handleRecalculateAll}
+                isLoading={recalculateMutation.isPending}
+                className="flex items-center gap-2"
+                title="Recalculer toutes les urgences avec les rotations"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Recalculer urgences
+              </Button>
+
+              {/* Bouton Import rotations */}
+              <Button 
+                variant="outline" 
+                onClick={() => setShowImportModal(true)}
+                className="flex items-center gap-2"
+              >
+                <Upload className="w-4 h-4" />
+                Import Rotations
+              </Button>
+
+              {/* Bouton Export */}
               <Button 
                 variant="outline" 
                 onClick={handleExport}
@@ -89,6 +138,8 @@ export default function DashboardPage() {
                 <Download className="w-4 h-4" />
                 Exporter CSV
               </Button>
+
+              {/* Bouton Nouveau signalement */}
               <Button 
                 variant="primary"
                 onClick={() => window.location.href = '/signalement'}
@@ -133,7 +184,7 @@ export default function DashboardPage() {
 
         </div>
 
-        {/* Modal de confirmation */}
+        {/* Modal de confirmation pour actions groupées */}
         {showConfirmModal && bulkAction && (
           <ConfirmBulkActionModal
             selectedCount={selectedIds.length}
@@ -144,6 +195,14 @@ export default function DashboardPage() {
               setBulkAction(null);
             }}
             isLoading={bulkUpdateMutation.isPending}
+          />
+        )}
+
+        {/* Modal d'import des rotations */}
+        {showImportModal && (
+          <RotationImportModal
+            onClose={() => setShowImportModal(false)}
+            onSuccess={handleImportSuccess}
           />
         )}
 

@@ -43,7 +43,9 @@ export function DashboardFiltersComponent({
       datePeremptionFrom: '',
       datePeremptionTo: '',
       quantiteMin: '',
-      quantiteMax: ''
+      quantiteMax: '',
+      urgenceCalculee: 'ALL',
+      avecRotation: false
     };
     setTempFilters(clearedFilters);
     onClearFilters();

@@ -1,4 +1,4 @@
-// prisma/schema.prisma - Version avec A_VERIFIER
+// prisma/schema.prisma - Version complète avec rotation
 generator client {
   provider = "prisma-client-js"
 }
@@ -17,17 +17,37 @@ enum SignalementStatus {
 }
 
 model Signalement {
-  id             String            @id @default(cuid())
-  codeBarres     String
-  quantite       Int
-  datePeremption DateTime
-  commentaire    String?
-  status         SignalementStatus @default(EN_ATTENTE)
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  id                   String            @id @default(cuid())
+  codeBarres          String
+  quantite            Int
+  datePeremption      DateTime
+  commentaire         String?
+  status              SignalementStatus @default(EN_ATTENTE)
+  
+  // Nouveaux champs rotation
+  urgenceCalculee     String?           // 'low', 'medium', 'high', 'critical'
+  probabiliteEcoulement Decimal?        @db.Decimal(5,2)
+  
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
   @@index([createdAt(sort: Desc)])
   @@index([status])
-  @@index([status, datePeremption(sort: Desc)])
+  @@index([urgenceCalculee])
+  @@index([probabiliteEcoulement(sort: Desc)])
+  @@index([codeBarres]) // Pour lookup rotation
+  @@index([urgenceCalculee, status])
   @@map("signalements")
+}
+
+model ProductRotation {
+  id                String   @id @default(cuid())
+  ean13            String   @unique
+  rotationMensuelle Decimal  @db.Decimal(8,2)
+  derniereMAJ      DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([derniereMAJ(sort: Desc)])
+  @@map("product_rotations")
 }

@@ -1,4 +1,4 @@
-// src/hooks/useDashboard.ts - Version simplifiée sans auto-debounce
+// src/hooks/useDashboard.ts - Version corrigée avec nouveaux champs
 import { useState, useMemo } from 'react';
 import type { DashboardFilters, SignalementStatus } from '@/lib/types';
 import { useSignalements, useDeleteSignalement, useBulkUpdateStatus } from './useSignalements';
@@ -9,10 +9,12 @@ export function useDashboard() {
     search: '',
     status: 'ALL',
     urgency: 'ALL',
+    urgenceCalculee: 'ALL',
     datePeremptionFrom: '',
     datePeremptionTo: '',
     quantiteMin: '',
-    quantiteMax: ''
+    quantiteMax: '',
+    avecRotation: false
   });
   
   // États de l'interface
@@ -25,11 +27,12 @@ export function useDashboard() {
     ...filters,
     // Sérialiser les arrays pour l'URL
     status: Array.isArray(filters.status) ? JSON.stringify(filters.status) : filters.status,
-    urgency: Array.isArray(filters.urgency) ? JSON.stringify(filters.urgency) : filters.urgency
+    urgency: Array.isArray(filters.urgency) ? JSON.stringify(filters.urgency) : filters.urgency,
+    urgenceCalculee: Array.isArray(filters.urgenceCalculee) ? JSON.stringify(filters.urgenceCalculee) : filters.urgenceCalculee
   }), [filters]);
 
   // Hooks React Query
-  const signalementsQuery = useSignalements(1, 100, apiFilters as Partial<DashboardFilters & { status: string; urgency: string }>);
+  const signalementsQuery = useSignalements(1, 100, apiFilters as Partial<DashboardFilters & { status: string; urgency: string; urgenceCalculee: string }>);
   const deleteMutation = useDeleteSignalement();
   const bulkUpdateMutation = useBulkUpdateStatus();
 
@@ -85,10 +88,12 @@ export function useDashboard() {
       search: '',
       status: 'ALL',
       urgency: 'ALL',
+      urgenceCalculee: 'ALL',
       datePeremptionFrom: '',
       datePeremptionTo: '',
       quantiteMin: '',
-      quantiteMax: ''
+      quantiteMax: '',
+      avecRotation: false
     });
   };
 
@@ -127,8 +132,11 @@ export function useDashboard() {
 
   // Vérifier si des filtres sont actifs
   const hasActiveFilters = Object.entries(filters).some(([key, value]) => {
-    if (key === 'status' || key === 'urgency') {
+    if (key === 'status' || key === 'urgency' || key === 'urgenceCalculee') {
       return value !== 'ALL';
+    }
+    if (key === 'avecRotation') {
+      return value === true;
     }
     return value && value !== '';
   });
