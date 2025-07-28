@@ -1,27 +1,10 @@
-// src/hooks/useDashboard.ts
-import { useState, useMemo, useEffect } from 'react';
+// src/hooks/useDashboard.ts - Version simplifiée sans auto-debounce
+import { useState, useMemo } from 'react';
 import type { DashboardFilters, SignalementStatus } from '@/lib/types';
 import { useSignalements, useDeleteSignalement, useBulkUpdateStatus } from './useSignalements';
 
-// Hook pour debounce
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [value, delay]);
-
-  return debouncedValue;
-}
-
 export function useDashboard() {
-  // États des filtres
+  // États des filtres - appliqués manuellement
   const [filters, setFilters] = useState<DashboardFilters>({
     search: '',
     status: 'ALL',
@@ -32,42 +15,25 @@ export function useDashboard() {
     quantiteMax: ''
   });
   
-  // Debounce pour les champs de saisie
-  const debouncedSearch = useDebounce(filters.search, 500);
-  const debouncedDateFrom = useDebounce(filters.datePeremptionFrom, 800);
-  const debouncedDateTo = useDebounce(filters.datePeremptionTo, 800);
-  const debouncedQuantiteMin = useDebounce(filters.quantiteMin, 800);
-  const debouncedQuantiteMax = useDebounce(filters.quantiteMax, 800);
-  
   // États de l'interface
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [bulkAction, setBulkAction] = useState<SignalementStatus | null>(null);
   
-  // Filtres finaux avec debounce
-  const finalFilters = useMemo(() => ({
+  // Préparation des filtres pour l'API
+  const apiFilters = useMemo(() => ({
     ...filters,
-    search: debouncedSearch,
-    datePeremptionFrom: debouncedDateFrom,
-    datePeremptionTo: debouncedDateTo,
-    quantiteMin: debouncedQuantiteMin,
-    quantiteMax: debouncedQuantiteMax
-  }), [
-    filters.status, 
-    filters.urgency, 
-    debouncedSearch, 
-    debouncedDateFrom, 
-    debouncedDateTo,
-    debouncedQuantiteMin,
-    debouncedQuantiteMax
-  ]);
+    // Sérialiser les arrays pour l'URL
+    status: Array.isArray(filters.status) ? JSON.stringify(filters.status) : filters.status,
+    urgency: Array.isArray(filters.urgency) ? JSON.stringify(filters.urgency) : filters.urgency
+  }), [filters]);
 
   // Hooks React Query
-  const { data: signalementsData, isLoading, error } = useSignalements(1, 100, finalFilters);
+  const signalementsQuery = useSignalements(1, 100, apiFilters as Partial<DashboardFilters & { status: string; urgency: string }>);
   const deleteMutation = useDeleteSignalement();
   const bulkUpdateMutation = useBulkUpdateStatus();
 
-  const signalements = signalementsData?.data || [];
+  const signalements = signalementsQuery.data?.data || [];
 
   // Gestion de la sélection
   const handleSelectAll = (checked: boolean) => {
@@ -109,7 +75,7 @@ export function useDashboard() {
     }
   };
 
-  // Gestion des filtres
+  // Gestion des filtres - application manuelle
   const updateFilters = (newFilters: DashboardFilters) => {
     setFilters(newFilters);
   };
@@ -142,10 +108,7 @@ export function useDashboard() {
     const csvLines: string[] = [];
     
     signalements.forEach(item => {
-      // Ligne 1 : Code EAN et quantité
       csvLines.push(`${item.codeBarres}; ${item.quantite}`);
-      
-      // Ligne 2 : Date péremption
       const datePeremption = new Date(item.datePeremption).toLocaleDateString('fr-FR');
       csvLines.push(datePeremption);
     });
@@ -163,16 +126,12 @@ export function useDashboard() {
   };
 
   // Vérifier si des filtres sont actifs
-  const hasActiveFilters = Object.values(finalFilters).some(f => f && f !== 'ALL');
-
-  // Valeurs debouncées pour l'UI
-  const debouncedValues = {
-    search: debouncedSearch,
-    dateFrom: debouncedDateFrom,
-    dateTo: debouncedDateTo,
-    quantiteMin: debouncedQuantiteMin,
-    quantiteMax: debouncedQuantiteMax
-  };
+  const hasActiveFilters = Object.entries(filters).some(([key, value]) => {
+    if (key === 'status' || key === 'urgency') {
+      return value !== 'ALL';
+    }
+    return value && value !== '';
+  });
 
   return {
     // États
@@ -181,10 +140,9 @@ export function useDashboard() {
     showConfirmModal,
     bulkAction,
     signalements,
-    isLoading,
-    error,
+    isLoading: signalementsQuery.isLoading,
+    error: signalementsQuery.error,
     hasActiveFilters,
-    debouncedValues,
     
     // Mutations
     deleteMutation,

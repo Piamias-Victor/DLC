@@ -1,7 +1,9 @@
-// src/lib/validations/signalement.ts - Mise à jour avec filtres quantité
+// src/lib/validations/signalement.ts - Version corrigée
 import { z } from 'zod';
 
-const SignalementStatusEnum = z.enum(['EN_ATTENTE', 'EN_COURS', 'A_DESTOCKER', 'DETRUIT']);
+// Utiliser les types Prisma pour éviter les conflits
+const SignalementStatusEnum = z.enum(['EN_ATTENTE', 'EN_COURS', 'A_DESTOCKER', 'A_VERIFIER', 'DETRUIT']);
+const UrgencyEnum = z.enum(['low', 'medium', 'high', 'critical']);
 
 export const SignalementCreateSchema = z.object({
   codeBarres: z.string().min(8).max(50).trim(),
@@ -18,15 +20,21 @@ export const SignalementCreateSchema = z.object({
 
 export const SignalementUpdateSchema = SignalementCreateSchema.partial();
 
-// Schema pour les filtres - MISE À JOUR
+// Schema pour les filtres avec typage correct
 export const DashboardFiltersSchema = z.object({
   search: z.string().optional().default(''),
-  status: z.union([SignalementStatusEnum, z.literal('ALL')]).optional().default('ALL'),
-  urgency: z.enum(['low', 'medium', 'high', 'critical', 'ALL']).optional().default('ALL'),
+  status: z.union([
+    z.array(SignalementStatusEnum).min(1), 
+    z.literal('ALL')
+  ]).optional().default('ALL'),
+  urgency: z.union([
+    z.array(UrgencyEnum).min(1), 
+    z.literal('ALL')
+  ]).optional().default('ALL'),
   datePeremptionFrom: z.string().optional().default(''),
   datePeremptionTo: z.string().optional().default(''),
-  quantiteMin: z.string().optional().default(''),  // NOUVEAU
-  quantiteMax: z.string().optional().default(''),  // NOUVEAU
+  quantiteMin: z.string().optional().default(''),
+  quantiteMax: z.string().optional().default(''),
 });
 
 // Schema pour le changement d'état en masse

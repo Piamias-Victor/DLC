@@ -1,4 +1,6 @@
-// src/lib/types/index.ts - Version mise à jour avec filtre quantité
+// src/lib/types/index.ts - Types corrigés
+import type { Signalement as PrismaSignalement } from '@prisma/client';
+
 export interface ParsedCode {
   originalCode: string;
   codeType: 'EAN13' | 'DATA_MATRIX' | 'UNKNOWN';
@@ -9,9 +11,9 @@ export interface ParsedCode {
   serialNumber?: string;
 }
 
-// Énumérations mises à jour
+// Utiliser directement les types Prisma pour éviter les conflits
+export type SignalementStatus = PrismaSignalement['status'];
 export type UrgencyLevel = 'low' | 'medium' | 'high' | 'critical';
-export type SignalementStatus = 'EN_ATTENTE' | 'EN_COURS' | 'A_DESTOCKER' | 'DETRUIT';
 export type CodeType = 'EAN13' | 'DATA_MATRIX' | 'UNKNOWN';
 
 // Types métier signalement
@@ -29,27 +31,18 @@ export interface SignalementWithId extends SignalementData {
   status: SignalementStatus;
 }
 
-// Type pour le signalement complet (depuis DB)
-export interface Signalement {
-  id: string;
-  codeBarres: string;
-  quantite: number;
-  datePeremption: Date | string;
-  commentaire: string | null;
-  status: SignalementStatus;
-  createdAt: Date | string;
-  updatedAt: Date | string;
-}
+// Type pour le signalement complet (depuis DB) - Utiliser le type Prisma
+export type Signalement = PrismaSignalement;
 
-// Types pour les filtres - MISE À JOUR
+// Types pour les filtres
 export interface DashboardFilters {
   search: string;
-  status: SignalementStatus | 'ALL';
-  urgency: UrgencyLevel | 'ALL';
+  status: SignalementStatus[] | 'ALL';
+  urgency: UrgencyLevel[] | 'ALL';
   datePeremptionFrom: string;
   datePeremptionTo: string;
-  quantiteMin: string;  // NOUVEAU
-  quantiteMax: string;  // NOUVEAU
+  quantiteMin: string;
+  quantiteMax: string;
 }
 
 // Types pour la sélection multiple
@@ -58,7 +51,7 @@ export interface BulkUpdateRequest {
   newStatus: SignalementStatus;
 }
 
-// Types pour l'historique (si besoin plus tard)
+// Types pour l'historique
 export interface StatusChangeLog {
   signalementId: string;
   fromStatus: SignalementStatus;
@@ -124,7 +117,7 @@ export interface SignalementUpdateData {
   status?: SignalementStatus;
 }
 
-// Types pour les parseurs (inchangés)
+// Types pour les parseurs
 export interface GS1ApplicationIdentifier {
   ai: string;
   description: string;

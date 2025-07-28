@@ -1,11 +1,11 @@
-// src/app/api/signalements/route.ts - Mise à jour avec filtre quantité
+// src/app/api/signalements/route.ts - GET mis à jour pour multi-sélection
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma/client';
-import { SignalementCreateSchema, DashboardFiltersSchema } from '@/lib/validations/signalement';
+import { SignalementCreateSchema } from '@/lib/validations/signalement';
 import { parseCode } from '@/lib/utils/codeParser';
 import { z } from 'zod';
 
-// GET /api/signalements - Liste des signalements avec filtres
+// GET /api/signalements - Liste avec filtres multi-sélection
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -15,21 +15,31 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const skip = (page - 1) * limit;
 
-    // Paramètres de filtres
-    const filters = DashboardFiltersSchema.parse({
+    // Parsing des filtres multi-sélection
+    const parseMultiSelectParam = (param: string | null) => {
+      if (!param || param === 'ALL') return 'ALL';
+      try {
+        const parsed = JSON.parse(param);
+        return Array.isArray(parsed) ? parsed : 'ALL';
+      } catch {
+        return param.split(',').filter(Boolean);
+      }
+    };
+
+    const filters = {
       search: searchParams.get('search') || '',
-      status: searchParams.get('status') || 'ALL',
-      urgency: searchParams.get('urgency') || 'ALL',
+      status: parseMultiSelectParam(searchParams.get('status')),
+      urgency: parseMultiSelectParam(searchParams.get('urgency')),
       datePeremptionFrom: searchParams.get('datePeremptionFrom') || '',
       datePeremptionTo: searchParams.get('datePeremptionTo') || '',
       quantiteMin: searchParams.get('quantiteMin') || '',
       quantiteMax: searchParams.get('quantiteMax') || '',
-    });
+    };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const whereConditions: any = {};
 
-    // Filtre par recherche (code-barres ou commentaire)
+    // Filtre par recherche
     if (filters.search) {
       whereConditions.OR = [
         { codeBarres: { contains: filters.search, mode: 'insensitive' } },
@@ -37,9 +47,9 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    // Filtre par statut
-    if (filters.status !== 'ALL') {
-      whereConditions.status = filters.status;
+    // Filtre par statut multi-sélection
+    if (filters.status !== 'ALL' && Array.isArray(filters.status) && filters.status.length > 0) {
+      whereConditions.status = { in: filters.status };
     }
 
     // Filtre par date de péremption
@@ -51,14 +61,13 @@ export async function GET(request: NextRequest) {
       }
       
       if (filters.datePeremptionTo) {
-        // Ajouter 23:59:59 pour inclure toute la journée
         const endDate = new Date(filters.datePeremptionTo);
         endDate.setHours(23, 59, 59, 999);
         whereConditions.datePeremption.lte = endDate;
       }
     }
 
-    // NOUVEAU : Filtre par quantité
+    // Filtre par quantité
     if (filters.quantiteMin || filters.quantiteMax) {
       whereConditions.quantite = {};
       
@@ -82,13 +91,13 @@ export async function GET(request: NextRequest) {
       prisma.signalement.count({ where: whereConditions })
     ]);
 
-    // Post-traitement pour le filtre d'urgence côté serveur
+    // Post-traitement pour le filtre d'urgence multi-sélection
     let filteredSignalements = signalements;
     
-    if (filters.urgency !== 'ALL') {
+    if (filters.urgency !== 'ALL' && Array.isArray(filters.urgency) && filters.urgency.length > 0) {
       filteredSignalements = signalements.filter((s: { datePeremption: Date; quantite: number }) => {
         const urgency = calculateUrgency(s.datePeremption, s.quantite);
-        return urgency === filters.urgency;
+        return filters.urgency.includes(urgency);
       });
     }
 
@@ -111,23 +120,20 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/signalements - Créer signalement (inchangé)
+// POST inchangé...
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    // Validation des données
     const validatedData = SignalementCreateSchema.parse(body);
     
-    // Parser le code pour extraire l'EAN13 si Data Matrix
     let finalCodeBarres = validatedData.codeBarres;
     try {
       const parsedCode = parseCode(validatedData.codeBarres);
       if (parsedCode.gtin) {
-        finalCodeBarres = parsedCode.gtin; // Utiliser l'EAN13 extrait
+        finalCodeBarres = parsedCode.gtin;
       }
     } catch (err) {
-      // Si parsing échoue, garder le code original
       console.warn('Parsing code failed, using original:', err);
     }
 

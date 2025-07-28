@@ -1,4 +1,4 @@
-// prisma/schema.prisma - Version mise à jour
+// prisma/schema.prisma - Version avec A_VERIFIER
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,6 +12,7 @@ enum SignalementStatus {
   EN_ATTENTE
   EN_COURS
   A_DESTOCKER
+  A_VERIFIER
   DETRUIT
 }
 

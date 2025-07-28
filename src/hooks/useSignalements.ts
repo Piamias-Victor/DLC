@@ -1,9 +1,9 @@
-// src/lib/hooks/useSignalements.ts - Version mise à jour avec filtre quantité
+// src/hooks/useSignalements.ts - Mis à jour pour filtres multiples
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SignalementCreateInput, DashboardFiltersInput, BulkUpdateStatusInput } from '@/lib/validations/signalement';
-import { Signalement, DashboardFilters } from '../types';
+import { DashboardFilters } from '@/lib/types';
+import { Signalement } from '@prisma/client';
 
-// Types pour l'API
 interface SignalementsResponse {
   data: Signalement[];
   pagination: {
@@ -15,11 +15,11 @@ interface SignalementsResponse {
   filters: DashboardFilters;
 }
 
-// Fonctions API - MISE À JOUR
+// Fonction API mise à jour pour gérer les filtres multiples
 const fetchSignalements = async (
   page = 1, 
   limit = 20, 
-  filters: Partial<DashboardFilters> = {}
+  filters: Partial<DashboardFilters & { status: string; urgency: string }> = {}
 ): Promise<SignalementsResponse> => {
   const params = new URLSearchParams({
     page: page.toString(),
@@ -29,8 +29,8 @@ const fetchSignalements = async (
     ...(filters.urgency && filters.urgency !== 'ALL' && { urgency: filters.urgency }),
     ...(filters.datePeremptionFrom && { datePeremptionFrom: filters.datePeremptionFrom }),
     ...(filters.datePeremptionTo && { datePeremptionTo: filters.datePeremptionTo }),
-    ...(filters.quantiteMin && { quantiteMin: filters.quantiteMin }),  // NOUVEAU
-    ...(filters.quantiteMax && { quantiteMax: filters.quantiteMax }),  // NOUVEAU
+    ...(filters.quantiteMin && { quantiteMin: filters.quantiteMin }),
+    ...(filters.quantiteMax && { quantiteMax: filters.quantiteMax }),
   });
 
   const response = await fetch(`/api/signalements?${params}`);
@@ -40,11 +40,10 @@ const fetchSignalements = async (
   return response.json();
 };
 
-// Types pour l'input côté client
 interface SignalementCreateData {
   codeBarres: string;
   quantite: number;
-  datePeremption: string; // String depuis le formulaire
+  datePeremption: string;
   commentaire?: string;
 }
 
@@ -75,7 +74,6 @@ const deleteSignalement = async (id: string): Promise<void> => {
   }
 };
 
-// Fonction pour le changement d'état en masse
 const bulkUpdateStatus = async (data: BulkUpdateStatusInput) => {
   const response = await fetch('/api/signalements/bulk-update', {
     method: 'POST',
@@ -97,7 +95,7 @@ const bulkUpdateStatus = async (data: BulkUpdateStatusInput) => {
 export function useSignalements(
   page = 1, 
   limit = 20, 
-  filters: Partial<DashboardFilters> = {}
+  filters: Partial<DashboardFilters & { status: string; urgency: string }> = {}
 ) {
   return useQuery({
     queryKey: ['signalements', page, limit, filters],
@@ -111,7 +109,6 @@ export function useCreateSignalement() {
   return useMutation({
     mutationFn: createSignalement,
     onSuccess: () => {
-      // Invalider le cache pour recharger la liste
       queryClient.invalidateQueries({ queryKey: ['signalements'] });
     },
   });
@@ -128,7 +125,6 @@ export function useDeleteSignalement() {
   });
 }
 
-// Hook pour le changement d'état en masse
 export function useBulkUpdateStatus() {
   const queryClient = useQueryClient();
   
@@ -140,5 +136,4 @@ export function useBulkUpdateStatus() {
   });
 }
 
-// Export du type Prisma pour usage dans les composants
 export type { Signalement };

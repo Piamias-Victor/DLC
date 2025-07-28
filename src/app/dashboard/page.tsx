@@ -21,7 +21,6 @@ export default function DashboardPage() {
     isLoading,
     error,
     hasActiveFilters,
-    debouncedValues,
     
     // Mutations
     deleteMutation,
@@ -110,7 +109,7 @@ export default function DashboardPage() {
             filters={filters}
             onFiltersChange={updateFilters}
             onClearFilters={clearFilters}
-            debouncedValues={debouncedValues}
+            isLoading={isLoading}
           />
 
           {/* Actions groupées */}

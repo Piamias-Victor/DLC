@@ -1,5 +1,8 @@
-// src/lib/constants/status.ts
-import type { StatusConfig, SignalementStatus } from '@/lib/types';
+// src/lib/constants/status.ts - Avec A_VERIFIER
+import type { StatusConfig } from '@/lib/types';
+import type { Signalement } from '@prisma/client';
+
+export type SignalementStatus = Signalement['status'];
 
 export const STATUS_CONFIG: Record<SignalementStatus, StatusConfig> = {
   EN_ATTENTE: {
@@ -19,6 +22,12 @@ export const STATUS_CONFIG: Record<SignalementStatus, StatusConfig> = {
     label: 'À déstocker',
     color: 'orange',
     description: 'Produit à transférer vers autre pharmacie'
+  },
+  A_VERIFIER: {
+    value: 'A_VERIFIER',
+    label: 'À vérifier',
+    color: 'orange',
+    description: 'Signalement nécessitant une vérification'
   },
   DETRUIT: {
     value: 'DETRUIT',
