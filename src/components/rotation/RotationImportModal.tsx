@@ -1,6 +1,6 @@
 // src/components/rotation/RotationImportModal.tsx - Version corrigée
 import { useState, useRef } from 'react';
-import { Upload, Download, X, FileText, AlertCircle, CheckCircle } from 'lucide-react';
+import { Upload, Download, X, FileText, AlertCircle, CheckCircle, Info } from 'lucide-react';
 import { Button } from '../atoms/Button';
 import { Card, CardHeader, CardContent } from '../atoms/Card';
 import { useImportRotations, useDownloadTemplate } from '@/hooks/rotation/useRotations';
@@ -59,11 +59,12 @@ export function RotationImportModal({ onClose, onSuccess }: RotationImportModalP
       
       setImportResult(result);
       
-      if (result.success > 0) {
+      // Fermer automatiquement seulement si vraiment réussi
+      if (result.created > 0 || result.updated > 0) {
         setTimeout(() => {
           onSuccess();
           onClose();
-        }, 2000);
+        }, 3000);
       }
     } catch (error) {
       console.error('Erreur import:', error);
@@ -86,9 +87,32 @@ export function RotationImportModal({ onClose, onSuccess }: RotationImportModalP
     }
   };
 
+  // Logique d'affichage corrigée
+  const getImportStatus = () => {
+    if (!importResult) return null;
+    
+    const hasCreatedOrUpdated = importResult.created > 0 || importResult.updated > 0;
+    const hasErrors = importResult.errors && importResult.errors.length > 0;
+    const totalProcessed = importResult.summary?.totalProcessed || 0;
+    
+    if (hasCreatedOrUpdated && !hasErrors) {
+      return { type: 'success', message: 'Import réussi' };
+    } else if (hasCreatedOrUpdated && hasErrors) {
+      return { type: 'warning', message: 'Import partiellement réussi' };
+    } else if (!hasCreatedOrUpdated && hasErrors) {
+      return { type: 'error', message: 'Import échoué' };
+    } else if (!hasCreatedOrUpdated && totalProcessed === 0) {
+      return { type: 'error', message: 'Aucune donnée trouvée' };
+    } else {
+      return { type: 'info', message: 'Aucune modification nécessaire' };
+    }
+  };
+
+  const importStatus = getImportStatus();
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <Card className="w-full max-w-lg">
+      <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <CardHeader
           title="Import des Rotations"
           subtitle="Fichier CSV avec EAN13 et rotation mensuelle"
@@ -111,6 +135,9 @@ export function RotationImportModal({ onClose, onSuccess }: RotationImportModalP
                   <div>
                     <p className="text-sm font-medium text-blue-900">Template CSV</p>
                     <p className="text-xs text-blue-700">Format: ean13,rotationMensuelle</p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      Séparateurs acceptés: virgule (,) point-virgule (;) tabulation
+                    </p>
                   </div>
                 </div>
                 <Button
@@ -180,51 +207,81 @@ export function RotationImportModal({ onClose, onSuccess }: RotationImportModalP
             </div>
 
             {/* Résultat import */}
-            {importResult && (
+            {importResult && importStatus && (
               <div className={`p-4 rounded-lg border ${
-                importResult.success > 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                importStatus.type === 'success' ? 'bg-green-50 border-green-200' :
+                importStatus.type === 'warning' ? 'bg-yellow-50 border-yellow-200' :
+                importStatus.type === 'info' ? 'bg-blue-50 border-blue-200' :
+                'bg-red-50 border-red-200'
               }`}>
                 <div className="flex items-start gap-3">
-                  {importResult.success > 0 ? (
-                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
-                  ) : (
-                    <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
-                  )}
+                  {importStatus.type === 'success' && <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />}
+                  {importStatus.type === 'warning' && <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />}
+                  {importStatus.type === 'info' && <Info className="w-5 h-5 text-blue-600 mt-0.5" />}
+                  {importStatus.type === 'error' && <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />}
                   
                   <div className="flex-1">
                     <p className="text-sm font-medium">
-                      Import {importResult.success > 0 ? 'réussi' : 'échoué'}
+                      {importStatus.message}
                     </p>
                     
                     <div className="mt-2 text-sm space-y-1">
-                      <p>✅ Créés: {importResult.created}</p>
-                      <p>🔄 Mis à jour: {importResult.updated}</p>
-                      {importResult.errors && importResult.errors.length > 0 && (
-                        <p>❌ Erreurs: {importResult.errors.length}</p>
+                      <p>📁 Fichier traité: {importResult.summary?.totalProcessed || 0} lignes</p>
+                      
+                      {importResult.created > 0 && (
+                        <p className="text-green-700">✅ Créés: {importResult.created}</p>
                       )}
+                      
+                      {importResult.updated > 0 && (
+                        <p className="text-blue-700">🔄 Mis à jour: {importResult.updated}</p>
+                      )}
+                      
+                      {importResult.errors && importResult.errors.length > 0 && (
+                        <p className="text-red-700">❌ Erreurs: {importResult.errors.length}</p>
+                      )}
+                      
                       {importResult.recalculatedUrgencies > 0 && (
-                        <p>⚡ Urgences recalculées: {importResult.recalculatedUrgencies}</p>
+                        <p className="text-purple-700">⚡ Urgences recalculées: {importResult.recalculatedUrgencies}</p>
+                      )}
+                      
+                      {importResult.created === 0 && importResult.updated === 0 && importResult.errors.length === 0 && (
+                        <p className="text-blue-700">ℹ️ Toutes les rotations étaient déjà à jour</p>
                       )}
                     </div>
 
+                    {/* Affichage des erreurs */}
                     {importResult.errors && importResult.errors.length > 0 && (
-                      <details className="mt-2">
-                        <summary className="text-xs text-gray-600 cursor-pointer">
-                          Voir les erreurs ({importResult.errors.length})
+                      <details className="mt-3">
+                        <summary className="text-xs text-gray-600 cursor-pointer hover:text-gray-800">
+                          📋 Détail des erreurs ({importResult.errors.length})
                         </summary>
-                        <div className="mt-1 max-h-32 overflow-y-auto">
-                          {importResult.errors.slice(0, 5).map((error: ImportError, i: number) => (
-                            <p key={i} className="text-xs text-red-600">
-                              Ligne {error.line}: {error.error}
-                            </p>
+                        <div className="mt-2 max-h-32 overflow-y-auto bg-white rounded p-2 border">
+                          {importResult.errors.slice(0, 10).map((error: ImportError, i: number) => (
+                            <div key={i} className="text-xs text-red-600 mb-1">
+                              <span className="font-mono bg-red-100 px-1 rounded">Ligne {error.line}</span>
+                              <span className="mx-1">EAN13: {error.ean13}</span>
+                              <span className="text-red-700">→ {error.error}</span>
+                            </div>
                           ))}
-                          {importResult.errors.length > 5 && (
-                            <p className="text-xs text-gray-500">
-                              ... et {importResult.errors.length - 5} autres
+                          {importResult.errors.length > 10 && (
+                            <p className="text-xs text-gray-500 italic">
+                              ... et {importResult.errors.length - 10} autres erreurs
                             </p>
                           )}
                         </div>
                       </details>
+                    )}
+
+                    {/* Conseil si aucune rotation créée/modifiée */}
+                    {importResult.created === 0 && importResult.updated === 0 && importResult.summary?.totalProcessed > 0 && (
+                      <div className="mt-3 p-2 bg-yellow-100 rounded text-xs">
+                        <p className="font-medium text-yellow-800">💡 Conseils de dépannage :</p>
+                        <ul className="text-yellow-700 mt-1 space-y-0.5">
+                          <li>• Vérifiez le format CSV (séparateur, encoding UTF-8)</li>
+                          <li>• Les EAN13 doivent être différents des valeurs existantes</li>
+                          <li>• Les rotations doivent être des nombres positifs ≤ 1000</li>
+                        </ul>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -238,7 +295,7 @@ export function RotationImportModal({ onClose, onSuccess }: RotationImportModalP
                 onClick={onClose}
                 disabled={importMutation.isPending}
               >
-                {importResult?.success && importResult.success > 0 ? 'Fermer' : 'Annuler'}
+                {importResult && (importResult.created > 0 || importResult.updated > 0) ? 'Fermer' : 'Annuler'}
               </Button>
               
               {!importResult && (
