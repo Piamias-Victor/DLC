@@ -1,5 +1,4 @@
-// src/components/dashboard/DashboardStats.tsx
-import { Package, Calendar, TrendingUp, AlertTriangle, CheckCircle } from 'lucide-react';
+// src/components/dashboard/DashboardStats.tsx - Design simplifié
 import { Card, CardContent } from '../atoms/Card';
 import { Signalement } from '@/lib/types';
 
@@ -11,6 +10,7 @@ interface Stats {
   total: number;
   enAttente: number;
   enCours: number;
+  ecoulement: number;
   critique: number;
   recent: number;
 }
@@ -20,7 +20,10 @@ function calculateStats(signalements: Signalement[]): Stats {
     total: signalements.length,
     enAttente: signalements.filter(s => s.status === 'EN_ATTENTE').length,
     enCours: signalements.filter(s => s.status === 'EN_COURS').length,
-    critique: signalements.filter(s => getUrgency(s.datePeremption, s.quantite) === 'critical').length,
+    ecoulement: signalements.filter(s => s.status === 'ECOULEMENT').length,
+    critique: signalements.filter(s => 
+      s.urgenceCalculee === 'critical' || getUrgency(s.datePeremption, s.quantite) === 'critical'
+    ).length,
     recent: signalements.filter(s => {
       const created = new Date(s.createdAt);
       const today = new Date();
@@ -57,48 +60,71 @@ export function DashboardStats({ signalements }: DashboardStatsProps) {
     {
       label: 'Total',
       value: stats.total,
-      icon: Package,
-      color: 'text-blue-600'
+      color: 'text-slate-700',
+      bgColor: 'bg-slate-50',
+      borderColor: 'border-l-slate-400'
     },
     {
       label: 'En attente',
       value: stats.enAttente,
-      icon: Calendar,
-      color: 'text-gray-600'
+      color: 'text-amber-700',
+      bgColor: 'bg-amber-50',
+      borderColor: 'border-l-amber-400'
     },
     {
       label: 'En cours',
       value: stats.enCours,
-      icon: TrendingUp,
-      color: 'text-blue-600'
+      color: 'text-blue-700',
+      bgColor: 'bg-blue-50',
+      borderColor: 'border-l-blue-400'
+    },
+    {
+      label: 'Écoulement',
+      value: stats.ecoulement,
+      color: 'text-emerald-700',
+      bgColor: 'bg-emerald-50',
+      borderColor: 'border-l-emerald-400',
     },
     {
       label: 'Critiques',
       value: stats.critique,
-      icon: AlertTriangle,
-      color: 'text-red-600'
+      color: 'text-red-700',
+      bgColor: 'bg-red-50',
+      borderColor: 'border-l-red-400'
     },
     {
       label: 'Aujourd\'hui',
       value: stats.recent,
-      icon: CheckCircle,
-      color: 'text-green-600'
+      color: 'text-violet-700',
+      bgColor: 'bg-violet-50',
+      borderColor: 'border-l-violet-400'
     }
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
       {statItems.map((stat) => (
-        <Card key={stat.label}>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">{stat.label}</p>
-                <p className={`text-2xl font-bold ${stat.color === 'text-gray-600' ? 'text-gray-600' : stat.color}`}>
+        <Card 
+          key={stat.label} 
+          className={`${stat.bgColor} border-l-4 ${stat.borderColor} hover:shadow-md transition-shadow`}
+        >
+          <CardContent className="p-4">
+            <div className="text-center">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-gray-600">
+                  {stat.label}
+                </p>
+                
+                <p className={`text-2xl font-bold ${stat.color}`}>
                   {stat.value}
                 </p>
+                
+                {stat.subtitle && (
+                  <p className={`text-xs ${stat.color} font-medium`}>
+                    {stat.subtitle}
+                  </p>
+                )}
               </div>
-              <stat.icon className={`w-8 h-8 ${stat.color}`} />
             </div>
           </CardContent>
         </Card>

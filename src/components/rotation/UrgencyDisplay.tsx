@@ -1,5 +1,5 @@
-// src/components/rotation/UrgencyDisplay.tsx - Version corrigée
-import { Info, TrendingUp, AlertTriangle } from 'lucide-react';
+// src/components/rotation/UrgencyDisplay.tsx - Avec support ECOULEMENT
+import { Info, TrendingUp, AlertTriangle, Droplets } from 'lucide-react';
 import { Badge } from '../atoms/Badge';
 import type { UrgencyLevel, SignalementWithRotation } from '@/lib/types';
 
@@ -26,29 +26,35 @@ export function UrgencyDisplay({
   }
 
   const urgencyConfig = {
-    low: { variant: 'success' as const, label: 'Faible', color: 'text-green-600' },
-    medium: { variant: 'warning' as const, label: 'Moyen', color: 'text-orange-600' },
-    high: { variant: 'error' as const, label: 'Élevé', color: 'text-red-600' },
-    critical: { variant: 'error' as const, label: 'Critique', color: 'text-red-700' },
-    ecoulement: { variant: 'success' as const, label: 'écoulement', color: 'text-cyan-700' }
+    low: { variant: 'success' as const, label: 'Faible', color: 'text-green-600', icon: Info },
+    medium: { variant: 'warning' as const, label: 'Moyen', color: 'text-orange-600', icon: AlertTriangle },
+    high: { variant: 'error' as const, label: 'Élevé', color: 'text-red-600', icon: AlertTriangle },
+    critical: { variant: 'error' as const, label: 'Critique', color: 'text-red-700', icon: AlertTriangle },
+    ecoulement: { variant: 'success' as const, label: 'Écoulement', color: 'text-cyan-700', icon: Droplets }
   };
 
   const config = urgencyConfig[urgenceCalculee];
 
   if (!showDetails) {
     return (
-      <Badge variant={config.variant} size="sm" className={className}>
-        {config.label}
-      </Badge>
+      <div className={`flex items-center gap-1 ${className}`}>
+        <config.icon className="w-3 h-3" />
+        <Badge variant={config.variant} size="sm">
+          {config.label}
+        </Badge>
+      </div>
     );
   }
 
   return (
     <div className={`space-y-2 ${className}`}>
       <div className="flex items-center gap-2">
-        <Badge variant={config.variant} size="sm">
-          {config.label}
-        </Badge>
+        <div className="flex items-center gap-1">
+          <config.icon className="w-4 h-4" />
+          <Badge variant={config.variant} size="sm">
+            {config.label}
+          </Badge>
+        </div>
         
         {probabiliteEcoulement !== null && probabiliteEcoulement !== undefined && (
           <div className="flex items-center gap-1 text-xs">
@@ -64,6 +70,7 @@ export function UrgencyDisplay({
         <div className="w-full bg-gray-200 rounded-full h-1.5">
           <div 
             className={`h-1.5 rounded-full transition-all duration-300 ${
+              urgenceCalculee === 'ecoulement' ? 'bg-cyan-500' :
               probabiliteEcoulement >= 85 ? 'bg-green-500' :
               probabiliteEcoulement >= 60 ? 'bg-orange-500' : 'bg-red-500'
             }`}
@@ -126,6 +133,12 @@ export function UrgencyTooltip({ signalement, rotation }: UrgencyTooltipProps) {
                 <div>Prob. écoulement: {Number(signalement.probabiliteEcoulement)}%</div>
               )}
             </>
+          )}
+          
+          {signalement.urgenceCalculee === 'ecoulement' && (
+            <div className="text-cyan-700 font-medium">
+              ✨ Écoulement naturel garanti
+            </div>
           )}
         </div>
         

@@ -1,4 +1,4 @@
-// src/lib/services/urgencyCalculator.ts - Nouvelle logique simple et claire
+// src/lib/services/urgencyCalculator.ts - Logique À_VERIFIER corrigée
 import { prisma } from '@/lib/prisma/client';
 import { RotationService } from './rotationService';
 import type { UrgencyCalculation, UrgencyLevel, Signalement } from '@/lib/types';
@@ -9,7 +9,7 @@ const RESPECT_FIFO = 0.65; // 65% de respect du FIFO
 export class UrgencyCalculator {
   
   /**
-   * Calcule l'urgence avec rotation - NOUVELLE LOGIQUE SIMPLIFIÉE
+   * Calcule l'urgence avec rotation - LOGIQUE ÉCOULEMENT CORRIGÉE
    */
   static calculateUrgencyWithRotation(
     quantite: number,
@@ -32,7 +32,7 @@ export class UrgencyCalculator {
     // Probabilité d'écoulement (%)
     const probabiliteEcoulement = Math.min(100, (quantiteAvecFifo / quantite) * 100);
     
-    // NOUVELLE LOGIQUE ULTRA-SIMPLE
+    // LOGIQUE ULTRA-SIMPLE AVEC ÉCOULEMENT
     let urgence: UrgencyLevel;
     
     if (probabiliteEcoulement >= 100) {
@@ -99,7 +99,7 @@ export class UrgencyCalculator {
   }
 
   /**
-   * Met à jour l'urgence d'un signalement - NOUVELLE LOGIQUE STATUT
+   * Met à jour l'urgence d'un signalement - LOGIQUE À_VERIFIER CORRIGÉE
    */
   static async updateSignalementUrgency(signalementId: string): Promise<void> {
     const signalement = await prisma.signalement.findUnique({
@@ -129,21 +129,32 @@ export class UrgencyCalculator {
       );
     }
     
-    // NOUVELLE LOGIQUE D'ASSIGNATION DE STATUT - TA DEMANDE
-    if (signalement.status === 'EN_ATTENTE') {
-      
-      const aujourdhui = new Date();
-      const moisRestants = this.calculateMonthsDiff(aujourdhui, signalement.datePeremption);
-      
-      if (calculation.probabiliteEcoulement >= 100) {
-        newStatus = 'ECOULEMENT';   // 100% d'écoulement = ECOULEMENT
-      } else if (moisRestants < 1) {
-        newStatus = 'A_VERIFIER';   // < 1 mois = À VÉRIFIER
-      }
-      // Sinon reste EN_ATTENTE
-    }
+    // 🔥 LOGIQUE CORRIGÉE POUR À_VERIFIER
+    const aujourdhui = new Date();
+    const moisRestants = this.calculateMonthsDiff(aujourdhui, signalement.datePeremption);
     
-    // Mise à jour en base
+    // PRIORITÉ 1: Si 100% d'écoulement → ECOULEMENT (depuis n'importe quel statut)
+    if (calculation.probabiliteEcoulement >= 100) {
+      newStatus = 'ECOULEMENT';
+    } 
+    // PRIORITÉ 2: Si < 1 mois ET pas déjà en ECOULEMENT → À_VERIFIER
+    else if (moisRestants < 1 && signalement.status === 'EN_ATTENTE') {
+      newStatus = 'A_VERIFIER';
+    }
+    // PRIORITÉ 3: Les autres statuts ne changent pas automatiquement
+    // EN_COURS, A_DESTOCKER, etc. restent manuels
+    
+    console.log(`🎯 Signalement ${signalementId}:`, {
+      statusAvant: signalement.status,
+      statusApres: newStatus,
+      urgence: calculation.urgence,
+      probabiliteEcoulement: calculation.probabiliteEcoulement,
+      moisRestants: moisRestants,
+      raison: calculation.probabiliteEcoulement >= 100 ? 'ECOULEMENT_100%' : 
+             (moisRestants < 1 && signalement.status === 'EN_ATTENTE') ? 'A_VERIFIER_<1MOIS' : 'INCHANGE'
+    });
+    
+    // Mise à jour en base avec requête SQL brute pour éviter les problèmes d'enum
     await prisma.$executeRaw`
       UPDATE signalements 
       SET 
@@ -156,7 +167,7 @@ export class UrgencyCalculator {
   }
 
   /**
-   * Recalcule toutes les urgences
+   * Recalcule toutes les urgences - LOGIQUE À_VERIFIER CORRIGÉE
    */
   static async recalculateAllUrgencies(): Promise<{
     processed: number;
@@ -164,9 +175,10 @@ export class UrgencyCalculator {
     ecoulement: number;
     aVerifier: number;
   }> {
+    // Traiter tous les signalements sauf DETRUIT
     const signalements = await prisma.signalement.findMany({
       where: {
-        status: { in: ['EN_ATTENTE', 'EN_COURS'] }
+        status: { not: 'DETRUIT' }
       }
     });
 
@@ -174,6 +186,8 @@ export class UrgencyCalculator {
     let withRotation = 0;
     let ecoulement = 0;
     let aVerifier = 0;
+
+    console.log(`🔄 Recalcul démarré: ${signalements.length} signalements à traiter`);
 
     for (const signalement of signalements) {
       try {
@@ -196,18 +210,19 @@ export class UrgencyCalculator {
           );
         }
         
-        // NOUVELLE LOGIQUE D'ASSIGNATION DE STATUT
-        if (signalement.status === 'EN_ATTENTE') {
-          const aujourdhui = new Date();
-          const moisRestants = this.calculateMonthsDiff(aujourdhui, signalement.datePeremption);
-          
-          if (calculation.probabiliteEcoulement >= 100) {
-            newStatus = 'ECOULEMENT';
-            ecoulement++;
-          } else if (moisRestants < 1) {
-            newStatus = 'A_VERIFIER';
-            aVerifier++;
-          }
+        // 🔥 LOGIQUE CORRIGÉE POUR À_VERIFIER
+        const aujourdhui = new Date();
+        const moisRestants = this.calculateMonthsDiff(aujourdhui, signalement.datePeremption);
+        
+        // PRIORITÉ 1: Écoulement (depuis n'importe quel statut)
+        if (calculation.probabiliteEcoulement >= 100) {
+          newStatus = 'ECOULEMENT';
+          ecoulement++;
+        } 
+        // PRIORITÉ 2: À vérifier seulement depuis EN_ATTENTE et < 1 mois
+        else if (moisRestants < 1 && signalement.status === 'EN_ATTENTE') {
+          newStatus = 'A_VERIFIER';
+          aVerifier++;
         }
         
         // Mise à jour avec requête SQL brute
@@ -222,11 +237,24 @@ export class UrgencyCalculator {
         `;
         
         processed++;
+        
+        if (processed % 10 === 0) {
+          console.log(`⏳ Progression: ${processed}/${signalements.length}`);
+        }
+        
       } catch (error) {
-        console.error(`Erreur recalcul signalement ${signalement.id}:`, error);
+        console.error(`❌ Erreur recalcul signalement ${signalement.id}:`, error);
       }
     }
 
+    console.log(`✅ Recalcul terminé:`, {
+      processed,
+      withRotation,
+      ecoulement,
+      aVerifier,
+      pourcentageEcoulement: processed > 0 ? ((ecoulement / processed) * 100).toFixed(1) + '%' : '0%'
+    });
+    
     return { processed, withRotation, ecoulement, aVerifier };
   }
 

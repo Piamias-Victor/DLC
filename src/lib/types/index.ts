@@ -1,4 +1,4 @@
-// src/lib/types/index.ts - Correction simple
+// src/lib/types/index.ts - Avec filtre pourcentage écoulement
 import type { Signalement as PrismaSignalement, ProductRotation as PrismaProductRotation } from '@prisma/client';
 
 export interface ParsedCode {
@@ -13,7 +13,6 @@ export interface ParsedCode {
 
 // Types de base
 export type SignalementStatus = PrismaSignalement['status'];
-// src/lib/types/index.ts - UrgencyLevel mis à jour
 export type UrgencyLevel = 'low' | 'medium' | 'high' | 'critical' | 'ecoulement';
 export type CodeType = 'EAN13' | 'DATA_MATRIX' | 'UNKNOWN';
 
@@ -25,11 +24,11 @@ export interface SignalementData {
   commentaire?: string;
 }
 
-// Types complets depuis DB (Prisma génère déjà les bons types après migration)
+// Types complets depuis DB
 export type Signalement = PrismaSignalement;
 export type ProductRotation = PrismaProductRotation;
 
-// Types étendus avec rotation (les champs urgenceCalculee et probabiliteEcoulement sont déjà dans Signalement)
+// Types étendus avec rotation
 export interface SignalementWithRotation extends Signalement {
   rotation?: ProductRotation;
 }
@@ -79,17 +78,27 @@ export interface RotationImportResult {
   created: number;
 }
 
-// Types filtres avec urgence calculée
+// Types filtres - AVEC FILTRE POURCENTAGE
 export interface DashboardFilters {
   search: string;
   status: SignalementStatus[] | 'ALL';
-  urgency: UrgencyLevel[] | 'ALL';
-  urgenceCalculee: UrgencyLevel[] | 'ALL';
+  urgency: UrgencyLevel[] | 'ALL'; // Gardé pour rétrocompatibilité
+  urgenceCalculee: UrgencyLevel[] | 'ALL'; // Principal filtre d'urgence
   datePeremptionFrom: string;
   datePeremptionTo: string;
   quantiteMin: string;
   quantiteMax: string;
+  probabiliteEcoulementMax: string; // 🔥 NOUVEAU : Filtre pourcentage max
   avecRotation: boolean;
+}
+
+// Type pour le tri des colonnes
+export type SortField = 'codeBarres' | 'quantite' | 'datePeremption' | 'status' | 'urgenceCalculee' | 'probabiliteEcoulement' | 'createdAt';
+export type SortDirection = 'asc' | 'desc';
+
+export interface SortConfig {
+  field: SortField;
+  direction: SortDirection;
 }
 
 // Types pour bulk update

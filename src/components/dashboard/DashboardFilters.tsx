@@ -1,11 +1,11 @@
-// src/components/dashboard/DashboardFilters.tsx - Version avec bouton Appliquer
+// src/components/dashboard/DashboardFilters.tsx - Sans filtre pourcentage
 import { useState } from 'react';
 import { Filter, Search, X, Hash, RefreshCw } from 'lucide-react';
 import { Button } from '../atoms/Button';
 import { Card, CardHeader, CardContent } from '../atoms/Card';
 import { Input } from '../atoms/Input';
 import { MultiSelectFilter } from '../molecules/MultiSelectFilter';
-import { STATUS_CONFIG } from '@/lib/constants/status';
+import { STATUS_CONFIG, URGENCY_CONFIG } from '@/lib/constants/status';
 import type { DashboardFilters, SignalementStatus, UrgencyLevel } from '@/lib/types';
 
 interface DashboardFiltersProps {
@@ -40,11 +40,12 @@ export function DashboardFiltersComponent({
       search: '',
       status: 'ALL',
       urgency: 'ALL',
+      urgenceCalculee: 'ALL',
       datePeremptionFrom: '',
       datePeremptionTo: '',
       quantiteMin: '',
       quantiteMax: '',
-      urgenceCalculee: 'ALL',
+      probabiliteEcoulementMax: '',
       avecRotation: false
     };
     setTempFilters(clearedFilters);
@@ -52,8 +53,12 @@ export function DashboardFiltersComponent({
   };
 
   const hasActiveFilters = Object.entries(filters).some(([key, value]) => {
-    if (key === 'status' || key === 'urgency') {
+    if (key === 'status' || key === 'urgenceCalculee') {
       return value !== 'ALL';
+    }
+    // Ignorer les filtres non utilisés
+    if (key === 'avecRotation' || key === 'probabiliteEcoulementMax') {
+      return false;
     }
     return value && value !== '';
   });
@@ -66,12 +71,10 @@ export function DashboardFiltersComponent({
     label: config.label
   }));
 
-  const urgencyOptions = [
-    { value: 'critical', label: 'Critique' },
-    { value: 'high', label: 'Élevé' },
-    { value: 'medium', label: 'Moyen' },
-    { value: 'low', label: 'Faible' }
-  ];
+  const urgencyOptions = Object.values(URGENCY_CONFIG).map(config => ({
+    value: config.value,
+    label: config.label
+  }));
 
   return (
     <Card>
@@ -105,8 +108,8 @@ export function DashboardFiltersComponent({
         <CardContent>
           <div className="space-y-6">
             
-            {/* Première ligne de filtres */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Ligne de filtres principaux */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {/* Recherche */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700">Recherche</label>
@@ -130,34 +133,34 @@ export function DashboardFiltersComponent({
                 />
               </div>
 
-              {/* Urgence multi-sélection */}
+              {/* Urgence calculée */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700">Urgence</label>
                 <MultiSelectFilter
                   options={urgencyOptions}
-                  selectedValues={tempFilters.urgency}
-                  onChange={(values) => updateTempFilter('urgency', values as UrgencyLevel[] | 'ALL')}
+                  selectedValues={tempFilters.urgenceCalculee}
+                  onChange={(values) => updateTempFilter('urgenceCalculee', values as UrgencyLevel[] | 'ALL')}
                   placeholder="Urgences"
                   allLabel="Toutes urgences"
                 />
               </div>
+            </div>
 
+            {/* Ligne de filtres dates et quantités */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Date de péremption de */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Date péremption (de)</label>
+                <label className="block text-sm font-medium text-gray-700">Péremption (de)</label>
                 <Input
                   type="date"
                   value={tempFilters.datePeremptionFrom}
                   onChange={(e) => updateTempFilter('datePeremptionFrom', e.target.value)}
                 />
               </div>
-            </div>
 
-            {/* Deuxième ligne de filtres */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Date de péremption à */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Date péremption (à)</label>
+                <label className="block text-sm font-medium text-gray-700">Péremption (à)</label>
                 <Input
                   type="date"
                   value={tempFilters.datePeremptionTo}
@@ -190,54 +193,63 @@ export function DashboardFiltersComponent({
                   min="1"
                 />
               </div>
+            </div>
 
-              {/* Boutons d'action */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700 opacity-0">Actions</label>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="md"
-                    onClick={applyFilters}
-                    disabled={!hasPendingChanges}
-                    isLoading={isLoading}
-                    className="flex-1"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                    Appliquer
-                  </Button>
-                </div>
-              </div>
+            {/* Bouton d'action centré */}
+            <div className="flex justify-center gap-4">
+              {hasPendingChanges && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="md"
+                  onClick={() => setTempFilters(filters)}
+                >
+                  Annuler
+                </Button>
+              )}
+              
+              <Button
+                type="button"
+                variant="primary"
+                size="md"
+                onClick={applyFilters}
+                disabled={!hasPendingChanges}
+                isLoading={isLoading}
+              >
+                <RefreshCw className="w-4 h-4" />
+                Appliquer les filtres
+              </Button>
             </div>
 
             {/* Indicateur des filtres actifs */}
             {hasActiveFilters && (
               <div className="pt-4 border-t border-gray-200">
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 justify-center">
                   {Array.isArray(filters.status) && filters.status.length > 0 && (
                     <span className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-blue-100 text-blue-800 font-medium">
-                      Statuts: {filters.status.length}
+                      📋 Statuts: {filters.status.length}
+                      {filters.status.includes('ECOULEMENT') && ' (🌊)'}
                     </span>
                   )}
-                  {Array.isArray(filters.urgency) && filters.urgency.length > 0 && (
+                  {Array.isArray(filters.urgenceCalculee) && filters.urgenceCalculee.length > 0 && (
                     <span className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-orange-100 text-orange-800 font-medium">
-                      Urgences: {filters.urgency.length}
+                      ⚡ Urgences: {filters.urgenceCalculee.length}
+                      {filters.urgenceCalculee.includes('ecoulement') && ' (🌊)'}
                     </span>
                   )}
                   {filters.search && (
                     <span className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-green-100 text-green-800 font-medium">
-                      Recherche: &quot;{filters.search}&quot;
+                      🔍 &quot;{filters.search}&quot;
                     </span>
                   )}
                   {(filters.datePeremptionFrom || filters.datePeremptionTo) && (
                     <span className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-purple-100 text-purple-800 font-medium">
-                      Dates filtrées
+                      📅 Dates filtrées
                     </span>
                   )}
                   {(filters.quantiteMin || filters.quantiteMax) && (
                     <span className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-indigo-100 text-indigo-800 font-medium">
-                      Quantités filtrées
+                      📊 Quantités filtrées
                     </span>
                   )}
                 </div>
@@ -247,8 +259,8 @@ export function DashboardFiltersComponent({
             {/* Indicateur de changements en attente */}
             {hasPendingChanges && (
               <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <p className="text-sm text-yellow-800">
-                  💡 Vous avez des modifications non appliquées. Cliquez sur &quot;Appliquer&quot; pour les activer.
+                <p className="text-sm text-yellow-800 text-center">
+                  💡 Modifications en attente. Cliquez sur &quot;Appliquer les filtres&quot; pour les activer.
                 </p>
               </div>
             )}

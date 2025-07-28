@@ -1,5 +1,5 @@
-// src/components/dashboard/BulkActions.tsx
-import { Users, Settings, X } from 'lucide-react';
+// src/components/dashboard/BulkActions.tsx - Avec ECOULEMENT
+import { Users, Settings, X, Droplets } from 'lucide-react';
 import { Button } from '../atoms/Button';
 import { Card, CardContent } from '../atoms/Card';
 import { STATUS_CONFIG } from '@/lib/constants/status';
@@ -19,6 +19,38 @@ export function BulkActions({
   isLoading 
 }: BulkActionsProps) {
   if (selectedCount === 0) return null;
+
+  // Fonction pour obtenir les styles du bouton selon le statut
+  const getButtonStyles = (status: SignalementStatus) => {
+    const baseClasses = "flex items-center gap-2";
+    
+    switch (status) {
+      case 'EN_ATTENTE':
+        return `${baseClasses} border-gray-300 text-gray-700 hover:bg-gray-50`;
+      case 'EN_COURS':
+        return `${baseClasses} border-blue-300 text-blue-700 hover:bg-blue-50`;
+      case 'A_DESTOCKER':
+        return `${baseClasses} border-orange-300 text-orange-700 hover:bg-orange-50`;
+      case 'A_VERIFIER':
+        return `${baseClasses} border-orange-300 text-orange-700 hover:bg-orange-50`;
+      case 'ECOULEMENT':
+        return `${baseClasses} border-cyan-300 text-cyan-700 hover:bg-cyan-50`;
+      case 'DETRUIT':
+        return `${baseClasses} bg-red-600 hover:bg-red-700 text-white border-red-600`;
+      default:
+        return baseClasses;
+    }
+  };
+
+  // Fonction pour obtenir l'icône selon le statut
+  const getStatusIcon = (status: SignalementStatus) => {
+    switch (status) {
+      case 'ECOULEMENT':
+        return <Droplets className="w-4 h-4" />;
+      default:
+        return <Settings className="w-4 h-4" />;
+    }
+  };
 
   return (
     <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 shadow-lg">
@@ -49,14 +81,10 @@ export function BulkActions({
                 size="sm"
                 onClick={() => onBulkAction(config.value)}
                 isLoading={isLoading}
-                className={`
-                  ${config.value === 'EN_ATTENTE' ? 'border-gray-300 text-gray-700 hover:bg-gray-50' : ''}
-                  ${config.value === 'EN_COURS' ? 'border-blue-300 text-blue-700 hover:bg-blue-50' : ''}
-                  ${config.value === 'A_DESTOCKER' ? 'border-orange-300 text-orange-700 hover:bg-orange-50' : ''}
-                  ${config.value === 'DETRUIT' ? 'bg-red-600 hover:bg-red-700 text-white border-red-600' : ''}
-                `}
+                className={getButtonStyles(config.value)}
+                title={config.description}
               >
-                <Settings className="w-4 h-4" />
+                {getStatusIcon(config.value)}
                 {config.label}
               </Button>
             ))}
