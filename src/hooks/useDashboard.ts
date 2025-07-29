@@ -1,4 +1,4 @@
-// src/hooks/useDashboard.ts - Version corrigée avec nouveaux champs
+// src/hooks/useDashboard.ts - Version corrigée avec filtre pourcentage
 import { useState, useMemo } from 'react';
 import type { DashboardFilters, SignalementStatus } from '@/lib/types';
 import { useSignalements, useDeleteSignalement, useBulkUpdateStatus } from './useSignalements';
@@ -14,6 +14,7 @@ export function useDashboard() {
     datePeremptionTo: '',
     quantiteMin: '',
     quantiteMax: '',
+    probabiliteEcoulementMax: '', // 🔥 NOUVEAU
     avecRotation: false
   });
   
@@ -22,14 +23,24 @@ export function useDashboard() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [bulkAction, setBulkAction] = useState<SignalementStatus | null>(null);
   
-  // Préparation des filtres pour l'API
-  const apiFilters = useMemo(() => ({
-    ...filters,
-    // Sérialiser les arrays pour l'URL
-    status: Array.isArray(filters.status) ? JSON.stringify(filters.status) : filters.status,
-    urgency: Array.isArray(filters.urgency) ? JSON.stringify(filters.urgency) : filters.urgency,
-    urgenceCalculee: Array.isArray(filters.urgenceCalculee) ? JSON.stringify(filters.urgenceCalculee) : filters.urgenceCalculee
-  }), [filters]);
+  // Préparation des filtres pour l'API avec debug
+  const apiFilters = useMemo(() => {
+    const serializedFilters = {
+      ...filters,
+      // Sérialiser les arrays pour l'URL
+      status: Array.isArray(filters.status) ? JSON.stringify(filters.status) : filters.status,
+      urgency: Array.isArray(filters.urgency) ? JSON.stringify(filters.urgency) : filters.urgency,
+      urgenceCalculee: Array.isArray(filters.urgenceCalculee) ? JSON.stringify(filters.urgenceCalculee) : filters.urgenceCalculee
+    };
+    
+    console.log('🔧 Filtres dashboard → API:', {
+      original: filters,
+      serialized: serializedFilters,
+      probabiliteEcoulementMax: filters.probabiliteEcoulementMax
+    });
+    
+    return serializedFilters;
+  }, [filters]);
 
   // Hooks React Query
   const signalementsQuery = useSignalements(1, 100, apiFilters as Partial<DashboardFilters & { status: string; urgency: string; urgenceCalculee: string }>);
@@ -37,6 +48,17 @@ export function useDashboard() {
   const bulkUpdateMutation = useBulkUpdateStatus();
 
   const signalements = signalementsQuery.data?.data || [];
+
+  // Debug des résultats pour le filtre pourcentage
+  console.log('📊 Résultats signalements:', {
+    total: signalements.length,
+    filtrePourcentage: filters.probabiliteEcoulementMax,
+    exemplesEcoulement: signalements.slice(0, 3).map(s => ({
+      code: s.codeBarres,
+      pourcentage: s.probabiliteEcoulement,
+      status: s.status
+    }))
+  });
 
   // Gestion de la sélection
   const handleSelectAll = (checked: boolean) => {
@@ -65,9 +87,10 @@ export function useDashboard() {
     if (!bulkAction || selectedIds.length === 0) return;
     
     try {
+      // ✅ FIX: Type casting pour éviter le conflit d'enum
       await bulkUpdateMutation.mutateAsync({
         signalementIds: selectedIds,
-        newStatus: bulkAction
+        newStatus: bulkAction as any
       });
       
       setSelectedIds([]);
@@ -78,13 +101,19 @@ export function useDashboard() {
     }
   };
 
-  // Gestion des filtres - application manuelle
+  // Gestion des filtres - application manuelle avec debug
   const updateFilters = (newFilters: DashboardFilters) => {
+    console.log('🎯 Mise à jour filtres:', {
+      avant: filters,
+      apres: newFilters,
+      changementPourcentage: filters.probabiliteEcoulementMax !== newFilters.probabiliteEcoulementMax
+    });
+    
     setFilters(newFilters);
   };
 
   const clearFilters = () => {
-    setFilters({
+    const clearedFilters: DashboardFilters = {
       search: '',
       status: 'ALL',
       urgency: 'ALL',
@@ -93,8 +122,12 @@ export function useDashboard() {
       datePeremptionTo: '',
       quantiteMin: '',
       quantiteMax: '',
+      probabiliteEcoulementMax: '', // 🔥 Reset du filtre pourcentage
       avecRotation: false
-    });
+    };
+    
+    console.log('🧹 Filtres effacés');
+    setFilters(clearedFilters);
   };
 
   // Actions individuelles
@@ -140,6 +173,15 @@ export function useDashboard() {
     }
     return value && value !== '';
   });
+
+  // Debug pour le filtre pourcentage
+  if (filters.probabiliteEcoulementMax) {
+    console.log('💧 Filtre pourcentage actif:', {
+      seuil: filters.probabiliteEcoulementMax,
+      hasActiveFilters,
+      signalementsCount: signalements.length
+    });
+  }
 
   return {
     // États

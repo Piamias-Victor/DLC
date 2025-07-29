@@ -1,4 +1,4 @@
-// src/app/api/signalements/route.ts - Mise à jour avec calcul d'urgence
+// src/app/api/signalements/route.ts - Avec filtre pourcentage écoulement
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma/client';
 import { SignalementCreateSchema } from '@/lib/validations/signalement';
@@ -6,7 +6,7 @@ import { UrgencyCalculator } from '@/lib/services/urgencyCalculator';
 import { parseCode } from '@/lib/utils/codeParser';
 import { z } from 'zod';
 
-// GET /api/signalements - Liste avec filtres étendus
+// GET /api/signalements - Liste avec filtres et support pourcentage écoulement
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -30,14 +30,16 @@ export async function GET(request: NextRequest) {
     const filters = {
       search: searchParams.get('search') || '',
       status: parseMultiSelectParam(searchParams.get('status')),
-      urgency: parseMultiSelectParam(searchParams.get('urgency')),
       urgenceCalculee: parseMultiSelectParam(searchParams.get('urgenceCalculee')),
       datePeremptionFrom: searchParams.get('datePeremptionFrom') || '',
       datePeremptionTo: searchParams.get('datePeremptionTo') || '',
       quantiteMin: searchParams.get('quantiteMin') || '',
       quantiteMax: searchParams.get('quantiteMax') || '',
+      probabiliteEcoulementMax: searchParams.get('probabiliteEcoulementMax') || '', // 🔥 NOUVEAU
       avecRotation: searchParams.get('avecRotation') === 'true',
     };
+
+    console.log('🔍 Filtres API avec pourcentage:', filters);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const whereConditions: any = {};
@@ -50,27 +52,38 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    // Filtre par statut multi-sélection
+    // Filtre par statut - AVEC ECOULEMENT
     if (filters.status !== 'ALL' && Array.isArray(filters.status) && filters.status.length > 0) {
       whereConditions.status = { in: filters.status };
+      console.log('📋 Filtre statut:', filters.status);
     }
 
-    // Filtre par urgence calculée
+    // Filtre par urgence calculée - AVEC ECOULEMENT
     if (filters.urgenceCalculee !== 'ALL' && Array.isArray(filters.urgenceCalculee) && filters.urgenceCalculee.length > 0) {
       whereConditions.urgenceCalculee = { in: filters.urgenceCalculee };
+      console.log('⚡ Filtre urgence calculée:', filters.urgenceCalculee);
     }
 
-    // Filtre rotation
+    // 🔥 NOUVEAU : Filtre pourcentage d'écoulement MAX
+    if (filters.probabiliteEcoulementMax && !isNaN(parseFloat(filters.probabiliteEcoulementMax))) {
+      const maxPercentage = parseFloat(filters.probabiliteEcoulementMax);
+      whereConditions.probabiliteEcoulement = {
+        lte: maxPercentage
+      };
+      console.log(`💧 Filtre écoulement ≤ ${maxPercentage}%`);
+    }
+
+    // Filtre "sans rotation uniquement" (pas utilisé mais gardé pour compatibilité)
     if (filters.avecRotation) {
-      // Sous-requête pour vérifier existence rotation
       const signalementsAvecRotation = await prisma.$queryRaw`
         SELECT s.id 
         FROM signalements s 
         INNER JOIN product_rotations pr ON s."codeBarres" = pr.ean13
-      `;
+      ` as { id: string }[];
       
-      const idsAvecRotation = (signalementsAvecRotation as { id: number }[]).map(s => s.id);
-      whereConditions.id = { in: idsAvecRotation };
+      const idsAvecRotation = signalementsAvecRotation.map(s => s.id);
+      whereConditions.id = { notIn: idsAvecRotation };
+      console.log('🚫 Filtre sans rotation:', idsAvecRotation.length, 'exclus');
     }
 
     // Filtre par date de péremption
@@ -101,6 +114,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    console.log('🎯 Conditions WHERE finales:', JSON.stringify(whereConditions, null, 2));
+
     // Exécution des requêtes
     const [signalements, total] = await Promise.all([
       prisma.signalement.findMany({
@@ -112,25 +127,36 @@ export async function GET(request: NextRequest) {
       prisma.signalement.count({ where: whereConditions })
     ]);
 
-    // Post-traitement pour le filtre d'urgence classique (rétrocompatibilité)
-    let filteredSignalements = signalements;
-    
-    if (filters.urgency !== 'ALL' && Array.isArray(filters.urgency) && filters.urgency.length > 0) {
-      filteredSignalements = signalements.filter((s: { datePeremption: Date; quantite: number }) => {
-        const urgency = calculateClassicUrgency(s.datePeremption, s.quantite);
-        return filters.urgency.includes(urgency);
-      });
-    }
+    console.log(`📊 Résultats avec filtre pourcentage: ${signalements.length}/${total} signalements`);
+
+    // ✅ FIX: Statistiques spéciales avec pourcentage - TYPE CASTING
+    const statsEcoulement = {
+      totalEcoulement: signalements.filter(s => (s.status as string) === 'ECOULEMENT').length,
+      urgenceEcoulement: signalements.filter(s => s.urgenceCalculee === 'ecoulement').length,
+      probabilite100: signalements.filter(s => s.probabiliteEcoulement && Number(s.probabiliteEcoulement) >= 100).length,
+      sansRotation: filters.avecRotation ? signalements.length : 0,
+      // 🔥 NOUVELLES STATS POURCENTAGE
+      filtrePourcentage: filters.probabiliteEcoulementMax ? {
+        seuil: parseFloat(filters.probabiliteEcoulementMax),
+        resultats: signalements.length,
+        moyennePourcentage: signalements.length > 0 ? 
+          signalements.reduce((sum, s) => sum + (Number(s.probabiliteEcoulement) || 0), 0) / signalements.length 
+          : 0
+      } : null
+    };
+
+    console.log('🌊 Stats écoulement avec pourcentage:', statsEcoulement);
 
     return NextResponse.json({
-      data: filteredSignalements,
+      data: signalements,
       pagination: {
         page,
         limit,
-        total: filters.urgency !== 'ALL' ? filteredSignalements.length : total,
-        pages: Math.ceil((filters.urgency !== 'ALL' ? filteredSignalements.length : total) / limit)
+        total,
+        pages: Math.ceil(total / limit)
       },
-      filters: filters
+      filters: filters,
+      stats: statsEcoulement
     });
   } catch (error) {
     console.error('Erreur GET signalements:', error);
@@ -158,6 +184,8 @@ export async function POST(request: NextRequest) {
       console.warn('Parsing code failed, using original:', err);
     }
 
+    console.log(`🆕 Création signalement: ${finalCodeBarres}`);
+
     // Créer le signalement
     const signalement = await prisma.signalement.create({
       data: {
@@ -166,13 +194,22 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Calcul automatique de l'urgence
+    console.log(`✅ Signalement créé: ${signalement.id}`);
+
+    // Calcul automatique de l'urgence avec support ECOULEMENT
     try {
+      console.log(`⚡ Calcul urgence pour: ${signalement.id}`);
       await UrgencyCalculator.updateSignalementUrgency(signalement.id);
       
       // Récupérer le signalement mis à jour
       const updatedSignalement = await prisma.signalement.findUnique({
         where: { id: signalement.id }
+      });
+      
+      console.log(`🎯 Signalement final:`, {
+        status: updatedSignalement?.status,
+        urgenceCalculee: updatedSignalement?.urgenceCalculee,
+        probabiliteEcoulement: updatedSignalement?.probabiliteEcoulement
       });
       
       return NextResponse.json(updatedSignalement || signalement, { status: 201 });
@@ -197,23 +234,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-// Fonction utilitaire pour calculer l'urgence classique (rétrocompatibilité)
-function calculateClassicUrgency(datePeremption: Date, quantite: number): 'low' | 'medium' | 'high' | 'critical' {
-  const today = new Date();
-  const diffDays = Math.ceil((datePeremption.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  
-  if (diffDays <= 30) return 'critical';
-  if (quantite >= 50 && diffDays <= 120) return 'critical';
-  if (diffDays > 30 && diffDays <= 75) {
-    if (quantite >= 10) return 'high';
-    if (quantite >= 5) return 'medium';
-    return 'low';
-  }
-  if (diffDays > 75 && diffDays <= 180) {
-    if (quantite >= 5) return 'medium';
-    return 'low';
-  }
-  return 'low';
 }

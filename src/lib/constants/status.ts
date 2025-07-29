@@ -1,8 +1,8 @@
-// src/lib/constants/status.ts - Mise à jour avec A_VERIFIER
-import type { StatusConfig } from '@/lib/types';
-import type { Signalement } from '@prisma/client';
+// src/lib/constants/status.ts - TYPES MANUELS FINI LES GALÈRES
+import type { StatusConfig, SignalementStatus } from '@/lib/types';
 
-export type SignalementStatus = Signalement['status'];
+// Plus d'import Prisma qui fait chier
+export { type SignalementStatus } from '@/lib/types';
 
 export const STATUS_CONFIG: Record<SignalementStatus, StatusConfig> = {
   EN_ATTENTE: {
@@ -28,6 +28,12 @@ export const STATUS_CONFIG: Record<SignalementStatus, StatusConfig> = {
     label: 'À vérifier',
     color: 'orange',
     description: 'Probablement écoulé, contrôle terrain requis'
+  },
+  ECOULEMENT: {
+    value: 'ECOULEMENT',
+    label: 'Écoulement',
+    color: 'green',
+    description: 'Produit en cours d\'écoulement dans la pharmacie (100% de chances)'
   },
   DETRUIT: {
     value: 'DETRUIT',
@@ -68,7 +74,7 @@ export const STATUS_COLORS = {
   }
 } as const;
 
-// Configuration des niveaux d'urgence
+// Configuration des niveaux d'urgence - AVEC ECOULEMENT
 export const URGENCY_CONFIG = {
   low: {
     value: 'low',
@@ -93,7 +99,35 @@ export const URGENCY_CONFIG = {
     label: 'Critique',
     color: 'red',
     description: 'Action immédiate nécessaire'
+  },
+  ecoulement: {
+    value: 'ecoulement',
+    label: 'Écoulement',
+    color: 'green',
+    description: 'Produit sera écoulé naturellement (100% de chances)'
   }
 } as const;
 
 export const URGENCY_OPTIONS = Object.values(URGENCY_CONFIG);
+
+// Couleurs pour les urgences
+export const URGENCY_COLORS = {
+  green: {
+    bg: 'bg-green-100',
+    text: 'text-green-700',
+    border: 'border-green-200',
+    dot: 'bg-green-500'
+  },
+  orange: {
+    bg: 'bg-orange-100',
+    text: 'text-orange-700',
+    border: 'border-orange-200',
+    dot: 'bg-orange-500'
+  },
+  red: {
+    bg: 'bg-red-100',
+    text: 'text-red-700',
+    border: 'border-red-200',
+    dot: 'bg-red-500'
+  }
+} as const;

@@ -1,4 +1,4 @@
-// src/hooks/useSignalements.ts - Version avec rotation
+// src/hooks/useSignalements.ts - Version complète avec matching intelligent
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SignalementCreateInput, DashboardFiltersInput, BulkUpdateStatusInput } from '@/lib/validations/signalement';
 import { DashboardFilters } from '@/lib/types';
@@ -30,7 +30,13 @@ interface SignalementsResponse {
   };
 }
 
-// Fonction API mise à jour pour inclure les rotations
+// Fonction de normalisation pour matching
+function normalizeForMatching(code: string): string {
+  const cleaned = code.replace(/[^0-9]/g, '').replace(/^0+/, '');
+  return cleaned.length >= 8 ? cleaned : code;
+}
+
+// Fonction API avec matching intelligent amélioré
 const fetchSignalements = async (
   page = 1, 
   limit = 20, 
@@ -61,7 +67,9 @@ const fetchSignalements = async (
   const rotationsData = rotationsResponse.ok ? await rotationsResponse.json() : { data: [] };
   const rotations = rotationsData.data || [];
 
-  // Définir le type pour les objets rotation
+  console.log(`📊 ${rotations.length} rotations chargées pour matching`);
+
+  // Type pour les rotations
   interface Rotation {
     id: string;
     ean13: string;
@@ -69,25 +77,124 @@ const fetchSignalements = async (
     derniereMAJ: string;
   }
 
-  // 3. Enrichir avec matching intelligent
+  // 3. Enrichir avec matching intelligent ULTRA-AMÉLIORÉ
   const enrichedSignalements = signalementsData.data.map((signalement: Signalement) => {
-    // Fonction de matching intelligent intégrée
-    const findRotation = (code: string) => {
-      // 1. Match exact
-      let rotation = rotations.find((r: Rotation) => r.ean13 === code);
+    
+    // Fonction de matching intelligent avec toutes les stratégies
+    const findRotation = (code: string): Rotation | null => {
+      const rotationList = rotations as Rotation[];
       
-      if (!rotation) {
-        // 2. Match normalisé (supprimer zéros de tête)
-        const normalizeEan13 = (c: string) => {
-          const cleaned = c.replace(/^0+/, '');
-          return cleaned.length >= 8 ? cleaned : c;
-        };
-        
-        const normalizedCode = normalizeEan13(code);
-        rotation = rotations.find((r: Rotation) => normalizeEan13(r.ean13) === normalizedCode);
+      console.log(`🔍 Recherche rotation pour signalement: "${code}"`);
+      
+      // 1. Match exact
+      let rotation = rotationList.find(r => r.ean13 === code);
+      if (rotation) {
+        console.log(`✅ Match exact: ${code} → ${rotation.ean13} (${rotation.rotationMensuelle})`);
+        return rotation;
       }
       
-      return rotation;
+      // 2. Match normalisé (supprimer zéros de tête)
+      const normalizedCode = normalizeForMatching(code);
+      rotation = rotationList.find(r => normalizeForMatching(r.ean13) === normalizedCode);
+      if (rotation) {
+        console.log(`✅ Match normalisé: ${code} → ${rotation.ean13} (${rotation.rotationMensuelle})`);
+        return rotation;
+      }
+      
+      // 3. Match préfixe (10 premiers chiffres)
+      if (normalizedCode.length >= 10) {
+        const codePrefix = normalizedCode.substring(0, 10);
+        rotation = rotationList.find(r => {
+          const rNormalized = normalizeForMatching(r.ean13);
+          if (rNormalized.length >= 10) {
+            const rPrefix = rNormalized.substring(0, 10);
+            return rPrefix === codePrefix;
+          }
+          return false;
+        });
+        if (rotation) {
+          console.log(`✅ Match préfixe (10): ${code} → ${rotation.ean13} (${rotation.rotationMensuelle})`);
+          return rotation;
+        }
+      }
+      
+      // 4. Match préfixe (8 premiers chiffres)
+      if (normalizedCode.length >= 8) {
+        const codePrefix8 = normalizedCode.substring(0, 8);
+        rotation = rotationList.find(r => {
+          const rNormalized = normalizeForMatching(r.ean13);
+          if (rNormalized.length >= 8) {
+            const rPrefix8 = rNormalized.substring(0, 8);
+            return rPrefix8 === codePrefix8;
+          }
+          return false;
+        });
+        if (rotation) {
+          console.log(`✅ Match préfixe (8): ${code} → ${rotation.ean13} (${rotation.rotationMensuelle})`);
+          return rotation;
+        }
+      }
+      
+      // 5. Match suffixe (8 derniers chiffres)
+      if (normalizedCode.length >= 8) {
+        const codeSuffix = normalizedCode.substring(normalizedCode.length - 8);
+        rotation = rotationList.find(r => {
+          const rNormalized = normalizeForMatching(r.ean13);
+          if (rNormalized.length >= 8) {
+            const rSuffix = rNormalized.substring(rNormalized.length - 8);
+            return rSuffix === codeSuffix;
+          }
+          return false;
+        });
+        if (rotation) {
+          console.log(`✅ Match suffixe (8): ${code} → ${rotation.ean13} (${rotation.rotationMensuelle})`);
+          return rotation;
+        }
+      }
+      
+      // 6. Match inclusion (le code signalement inclus dans rotation)
+      rotation = rotationList.find(r => {
+        const rNormalized = normalizeForMatching(r.ean13);
+        const codeNorm = normalizeForMatching(code);
+        return rNormalized.includes(codeNorm) && codeNorm.length >= 8;
+      });
+      if (rotation) {
+        console.log(`✅ Match inclusion (code dans rotation): ${code} → ${rotation.ean13} (${rotation.rotationMensuelle})`);
+        return rotation;
+      }
+      
+      // 7. Match inclusion inverse (rotation incluse dans code signalement)
+      rotation = rotationList.find(r => {
+        const rNormalized = normalizeForMatching(r.ean13);
+        const codeNorm = normalizeForMatching(code);
+        return codeNorm.includes(rNormalized) && rNormalized.length >= 8;
+      });
+      if (rotation) {
+        console.log(`✅ Match inclusion inverse (rotation dans code): ${code} → ${rotation.ean13} (${rotation.rotationMensuelle})`);
+        return rotation;
+      }
+      
+      // 8. Match partiel intelligent (au moins 8 chiffres communs consécutifs)
+      rotation = rotationList.find(r => {
+        const rNormalized = normalizeForMatching(r.ean13);
+        const codeNorm = normalizeForMatching(code);
+        
+        // Chercher sous-séquences communes de 8+ chiffres
+        for (let i = 0; i <= codeNorm.length - 8; i++) {
+          const subCode = codeNorm.substring(i, i + 8);
+          if (rNormalized.includes(subCode)) {
+            return true;
+          }
+        }
+        return false;
+      });
+      if (rotation) {
+        console.log(`✅ Match partiel (8+ chiffres communs): ${code} → ${rotation.ean13} (${rotation.rotationMensuelle})`);
+        return rotation;
+      }
+      
+      console.log(`❌ Aucune rotation trouvée pour: "${code}"`);
+      return null;
     };
     
     const rotation = findRotation(signalement.codeBarres);
@@ -97,9 +204,18 @@ const fetchSignalements = async (
     };
   });
 
+  // Statistiques de matching
+  const totalAvecRotation = enrichedSignalements.filter((s: SignalementWithRotation) => s.rotation).length;
+  console.log(`📈 Matching résultats: ${totalAvecRotation}/${enrichedSignalements.length} signalements avec rotation`);
+
   return {
     ...signalementsData,
-    data: enrichedSignalements
+    data: enrichedSignalements,
+    stats: {
+      totalAvecRotation,
+      moyenneProbaEcoulement: 0,
+      autoVerifies: 0
+    }
   };
 };
 
@@ -154,7 +270,6 @@ const bulkUpdateStatus = async (data: BulkUpdateStatusInput) => {
   return response.json();
 };
 
-// Hook pour teste le calcul d'urgence
 const testUrgencyCalculation = async (signalementId: string) => {
   const response = await fetch('/api/signalements/test-urgency', {
     method: 'POST',
@@ -217,7 +332,6 @@ export function useBulkUpdateStatus() {
   });
 }
 
-// Nouveau hook pour tester le calcul d'urgence
 export function useTestUrgencyCalculation() {
   const queryClient = useQueryClient();
   

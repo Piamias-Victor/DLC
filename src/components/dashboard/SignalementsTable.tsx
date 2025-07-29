@@ -1,12 +1,12 @@
-// src/components/dashboard/SignalementsTable.tsx - Version avec rotation
+// src/components/dashboard/SignalementsTable.tsx - Avec tri cliquable
 import { useState } from 'react';
-import { Package, Eye, Trash2, TrendingUp, Info } from 'lucide-react';
+import { Package, Eye, Trash2, TrendingUp, Info, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../atoms/Card';
 import { StatusBadge } from '../molecules/StatusBadge';
 import { UrgencyBadge } from './UrgencyBadge';
 import { UrgencyDisplay, RotationInfo } from '../rotation/UrgencyDisplay';
 import { SignalementModal } from './SignalementModal';
-import { Signalement } from '@/lib/types';
+import { Signalement, SortField, SortDirection, SortConfig } from '@/lib/types';
 
 // Import du type étendu
 interface SignalementWithRotation extends Signalement {
@@ -28,6 +28,17 @@ interface SignalementsTableProps {
   hasActiveFilters: boolean;
 }
 
+// Configuration des colonnes triables
+const SORTABLE_COLUMNS: Record<SortField, { label: string; tooltip?: string }> = {
+  codeBarres: { label: 'Code', tooltip: 'Trier par code-barres' },
+  quantite: { label: 'Quantité', tooltip: 'Trier par quantité' },
+  datePeremption: { label: 'Péremption', tooltip: 'Trier par date de péremption' },
+  status: { label: 'Statut', tooltip: 'Trier par statut' },
+  urgenceCalculee: { label: 'Urgence calculée', tooltip: 'Trier par urgence' },
+  probabiliteEcoulement: { label: 'Prob. écoulement', tooltip: 'Trier par probabilité d\'écoulement' },
+  createdAt: { label: 'Créé le', tooltip: 'Trier par date de création' }
+};
+
 export function SignalementsTable({
   signalements,
   selectedIds,
@@ -38,6 +49,79 @@ export function SignalementsTable({
   hasActiveFilters
 }: SignalementsTableProps) {
   const [selectedSignalement, setSelectedSignalement] = useState<Signalement | null>(null);
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'createdAt', direction: 'desc' });
+
+  // Fonction de tri
+  const handleSort = (field: SortField) => {
+    setSortConfig(prevConfig => ({
+      field,
+      direction: prevConfig.field === field && prevConfig.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  // Tri des signalements
+  const sortedSignalements = [...signalements].sort((a, b) => {
+    const { field, direction } = sortConfig;
+    let aValue: unknown = a[field];
+    let bValue: unknown = b[field];
+
+    // Gestion spéciale pour certains champs
+    if (field === 'datePeremption' || field === 'createdAt') {
+      aValue = new Date(aValue as string | number | Date).getTime();
+      bValue = new Date(bValue as string | number | Date).getTime();
+    } else if (field === 'quantite' || field === 'probabiliteEcoulement') {
+      aValue = Number(aValue) || 0;
+      bValue = Number(bValue) || 0;
+    } else if (typeof aValue === 'string') {
+      aValue = aValue.toLowerCase();
+      bValue = typeof bValue === 'string' ? bValue.toLowerCase() : '';
+    }
+
+    if (typeof aValue === 'number' && typeof bValue === 'number') {
+      if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+      return 0;
+    }
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+      return 0;
+    }
+    return 0;
+  });
+
+  // Composant pour l'en-tête de colonne triable
+  const SortableHeader = ({ field, children, className = '' }: { 
+    field: SortField; 
+    children: React.ReactNode;
+    className?: string;
+  }) => {
+    const config = SORTABLE_COLUMNS[field];
+    const isActive = sortConfig.field === field;
+    
+    return (
+      <th 
+        className={`text-left py-3 px-4 font-medium text-gray-600 cursor-pointer hover:bg-gray-50 transition-colors ${className}`}
+        onClick={() => handleSort(field)}
+        title={config.tooltip}
+      >
+        <div className="flex items-center gap-2 select-none">
+          <span>{children}</span>
+          <div className="flex flex-col">
+            {isActive ? (
+              sortConfig.direction === 'asc' ? (
+                <ChevronUp className="w-4 h-4 text-blue-600" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-blue-600" />
+              )
+            ) : (
+              <ChevronsUpDown className="w-4 h-4 text-gray-400" />
+            )}
+          </div>
+        </div>
+      </th>
+    );
+  };
 
   return (
     <>
@@ -50,6 +134,15 @@ export function SignalementsTable({
               : "Tous les signalements"
           }
           icon={<Package className="w-6 h-6" />}
+          action={
+            sortConfig.field !== 'createdAt' && (
+              <div className="text-sm text-gray-600 flex items-center gap-2">
+                <Info className="w-4 h-4" />
+                Trié par {SORTABLE_COLUMNS[sortConfig.field].label}
+                {sortConfig.direction === 'desc' ? ' (décroissant)' : ' (croissant)'}
+              </div>
+            )
+          }
         />
 
         <CardContent>
@@ -66,19 +159,19 @@ export function SignalementsTable({
                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                       />
                     </th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Code</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Quantité</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Péremption</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Statut</th>
+                    <SortableHeader field="codeBarres">Code</SortableHeader>
+                    <SortableHeader field="quantite">Quantité</SortableHeader>
+                    <SortableHeader field="datePeremption">Péremption</SortableHeader>
+                    <SortableHeader field="status">Statut</SortableHeader>
                     <th className="text-left py-3 px-4 font-medium text-gray-600">Rotation</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Urgence calculée</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Prob. écoulement</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Créé le</th>
+                    <SortableHeader field="urgenceCalculee">Urgence calculée</SortableHeader>
+                    <SortableHeader field="probabiliteEcoulement">Prob. écoulement</SortableHeader>
+                    <SortableHeader field="createdAt">Créé le</SortableHeader>
                     <th className="text-left py-3 px-4 font-medium text-gray-600">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {signalements.map((item) => (
+                  {sortedSignalements.map((item) => (
                     <SignalementRow
                       key={item.id}
                       signalement={item}
@@ -212,7 +305,7 @@ function SignalementRow({
       <td className="py-4 px-4">
         {signalement.urgenceCalculee ? (
           <UrgencyDisplay 
-            urgenceCalculee={signalement.urgenceCalculee as 'low' | 'medium' | 'high' | 'critical'}
+            urgenceCalculee={signalement.urgenceCalculee as 'low' | 'medium' | 'high' | 'critical' | 'ecoulement'}
             showDetails={false}
           />
         ) : (
@@ -230,13 +323,18 @@ function SignalementRow({
             <div className="w-16 bg-gray-200 rounded-full h-2">
               <div 
                 className={`h-2 rounded-full transition-all duration-300 ${
+                  Number(signalement.probabiliteEcoulement) >= 100 ? 'bg-cyan-500' :
                   Number(signalement.probabiliteEcoulement) >= 85 ? 'bg-green-500' :
                   Number(signalement.probabiliteEcoulement) >= 60 ? 'bg-orange-500' : 'bg-red-500'
                 }`}
                 style={{ width: `${Math.min(100, Number(signalement.probabiliteEcoulement))}%` }}
               />
             </div>
-            <span className="text-xs font-medium text-gray-700">
+            <span className={`text-xs font-medium ${
+              Number(signalement.probabiliteEcoulement) >= 100 ? 'text-cyan-700' :
+              Number(signalement.probabiliteEcoulement) >= 85 ? 'text-green-700' :
+              Number(signalement.probabiliteEcoulement) >= 60 ? 'text-orange-700' : 'text-red-700'
+            }`}>
               {Number(signalement.probabiliteEcoulement).toFixed(0)}%
             </span>
           </div>

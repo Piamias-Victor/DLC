@@ -1,17 +1,15 @@
-// src/lib/services/urgencyCalculator.ts - Version corrigée avec raw SQL
+// src/lib/services/urgencyCalculator.ts - Logique À_VERIFIER corrigée
 import { prisma } from '@/lib/prisma/client';
 import { RotationService } from './rotationService';
 import type { UrgencyCalculation, UrgencyLevel, Signalement } from '@/lib/types';
 
 // Constantes de configuration
 const RESPECT_FIFO = 0.65; // 65% de respect du FIFO
-const SEUIL_VERIFICATION = 85; // Si >85% de chances d'écoulement = À vérifier
-const MOIS_AUTO_VERIFIER = 3; // Auto-vérifier si <3 mois et forte probabilité
 
 export class UrgencyCalculator {
   
   /**
-   * Calcule l'urgence avec rotation
+   * Calcule l'urgence avec rotation - LOGIQUE ÉCOULEMENT CORRIGÉE
    */
   static calculateUrgencyWithRotation(
     quantite: number,
@@ -34,22 +32,27 @@ export class UrgencyCalculator {
     // Probabilité d'écoulement (%)
     const probabiliteEcoulement = Math.min(100, (quantiteAvecFifo / quantite) * 100);
     
-    // Déterminer l'urgence
-    const urgence = this.determineUrgencyLevel(
-      moisRestants, 
-      probabiliteEcoulement, 
-      surplus, 
-      quantite
-    );
-
-    // Auto-vérification si forte probabilité + délai court
-    const shouldAutoVerify = probabiliteEcoulement >= SEUIL_VERIFICATION && 
-                            moisRestants <= MOIS_AUTO_VERIFIER;
+    // LOGIQUE ULTRA-SIMPLE AVEC ÉCOULEMENT
+    let urgence: UrgencyLevel;
+    
+    if (probabiliteEcoulement >= 100) {
+      urgence = 'ecoulement';  // 100% = écoulement certain
+    } else if (moisRestants < 1) {
+      urgence = 'critical';    // < 1 mois = critique peu importe la rotation
+    } else if (probabiliteEcoulement >= 85) {
+      urgence = 'low';         // 85-99% = faible
+    } else if (probabiliteEcoulement >= 70) {
+      urgence = 'medium';      // 70-85% = moyen  
+    } else if (probabiliteEcoulement >= 50) {
+      urgence = 'high';        // 50-70% = élevé
+    } else {
+      urgence = 'critical';    // < 50% = critique
+    }
     
     return {
       urgence,
       probabiliteEcoulement: Math.round(probabiliteEcoulement * 100) / 100,
-      shouldAutoVerify,
+      shouldAutoVerify: false, // Pas utilisé dans la nouvelle logique
       reasoning: {
         moisRestants,
         quantiteTheorique: Math.round(quantiteTheorique),
@@ -84,7 +87,7 @@ export class UrgencyCalculator {
     
     return {
       urgence,
-      probabiliteEcoulement: 0, // Pas de calcul de probabilité
+      probabiliteEcoulement: 0,
       shouldAutoVerify: false,
       reasoning: {
         moisRestants: Math.ceil(joursRestants / 30),
@@ -96,7 +99,7 @@ export class UrgencyCalculator {
   }
 
   /**
-   * Met à jour l'urgence d'un signalement avec requête SQL brute
+   * Met à jour l'urgence d'un signalement - LOGIQUE À_VERIFIER CORRIGÉE
    */
   static async updateSignalementUrgency(signalementId: string): Promise<void> {
     const signalement = await prisma.signalement.findUnique({
@@ -112,27 +115,46 @@ export class UrgencyCalculator {
     let calculation: UrgencyCalculation;
     let newStatus = signalement.status;
     
+    // Calculer urgence
     if (rotation) {
-      // Calcul avec rotation
       calculation = this.calculateUrgencyWithRotation(
         signalement.quantite,
         signalement.datePeremption,
         Number(rotation.rotationMensuelle)
       );
-      
-      // Auto-assignation du statut À_VERIFIER
-      if (calculation.shouldAutoVerify && signalement.status === 'EN_ATTENTE') {
-        newStatus = 'A_VERIFIER';
-      }
     } else {
-      // Calcul classique
       calculation = this.calculateClassicUrgency(
         signalement.quantite,
         signalement.datePeremption
       );
     }
     
-    // Mise à jour en base avec requête SQL brute pour éviter les erreurs de types Prisma
+    // 🔥 LOGIQUE CORRIGÉE POUR À_VERIFIER
+    const aujourdhui = new Date();
+    const moisRestants = this.calculateMonthsDiff(aujourdhui, signalement.datePeremption);
+    
+    // PRIORITÉ 1: Si 100% d'écoulement → ECOULEMENT (depuis n'importe quel statut)
+    if (calculation.probabiliteEcoulement >= 100) {
+      newStatus = 'ECOULEMENT' as any; // ✅ FIX: Type casting
+    } 
+    // PRIORITÉ 2: Si < 1 mois ET pas déjà en ECOULEMENT → À_VERIFIER
+    else if (moisRestants < 1 && signalement.status === 'EN_ATTENTE') {
+      newStatus = 'A_VERIFIER' as any; // ✅ FIX: Type casting
+    }
+    // PRIORITÉ 3: Les autres statuts ne changent pas automatiquement
+    // EN_COURS, A_DESTOCKER, etc. restent manuels
+    
+    console.log(`🎯 Signalement ${signalementId}:`, {
+      statusAvant: signalement.status,
+      statusApres: newStatus,
+      urgence: calculation.urgence,
+      probabiliteEcoulement: calculation.probabiliteEcoulement,
+      moisRestants: moisRestants,
+      raison: calculation.probabiliteEcoulement >= 100 ? 'ECOULEMENT_100%' : 
+             (moisRestants < 1 && signalement.status === 'EN_ATTENTE') ? 'A_VERIFIER_<1MOIS' : 'INCHANGE'
+    });
+    
+    // Mise à jour en base avec requête SQL brute pour éviter les problèmes d'enum
     await prisma.$executeRaw`
       UPDATE signalements 
       SET 
@@ -145,22 +167,27 @@ export class UrgencyCalculator {
   }
 
   /**
-   * Recalcule toutes les urgences
+   * Recalcule toutes les urgences - LOGIQUE À_VERIFIER CORRIGÉE
    */
   static async recalculateAllUrgencies(): Promise<{
     processed: number;
     withRotation: number;
-    autoVerified: number;
+    ecoulement: number;
+    aVerifier: number;
   }> {
+    // Traiter tous les signalements sauf DETRUIT
     const signalements = await prisma.signalement.findMany({
       where: {
-        status: { in: ['EN_ATTENTE', 'EN_COURS'] }
+        status: { not: 'DETRUIT' }
       }
     });
 
     let processed = 0;
     let withRotation = 0;
-    let autoVerified = 0;
+    let ecoulement = 0;
+    let aVerifier = 0;
+
+    console.log(`🔄 Recalcul démarré: ${signalements.length} signalements à traiter`);
 
     for (const signalement of signalements) {
       try {
@@ -176,16 +203,26 @@ export class UrgencyCalculator {
             signalement.datePeremption,
             Number(rotation.rotationMensuelle)
           );
-          
-          if (calculation.shouldAutoVerify && signalement.status === 'EN_ATTENTE') {
-            newStatus = 'A_VERIFIER';
-            autoVerified++;
-          }
         } else {
           calculation = this.calculateClassicUrgency(
             signalement.quantite,
             signalement.datePeremption
           );
+        }
+        
+        // 🔥 LOGIQUE CORRIGÉE POUR À_VERIFIER
+        const aujourdhui = new Date();
+        const moisRestants = this.calculateMonthsDiff(aujourdhui, signalement.datePeremption);
+        
+        // PRIORITÉ 1: Écoulement (depuis n'importe quel statut)
+        if (calculation.probabiliteEcoulement >= 100) {
+          newStatus = 'ECOULEMENT' as any; // ✅ FIX: Type casting
+          ecoulement++;
+        } 
+        // PRIORITÉ 2: À vérifier seulement depuis EN_ATTENTE et < 1 mois
+        else if (moisRestants < 1 && signalement.status === 'EN_ATTENTE') {
+          newStatus = 'A_VERIFIER' as any; // ✅ FIX: Type casting
+          aVerifier++;
         }
         
         // Mise à jour avec requête SQL brute
@@ -200,12 +237,25 @@ export class UrgencyCalculator {
         `;
         
         processed++;
+        
+        if (processed % 10 === 0) {
+          console.log(`⏳ Progression: ${processed}/${signalements.length}`);
+        }
+        
       } catch (error) {
-        console.error(`Erreur recalcul signalement ${signalement.id}:`, error);
+        console.error(`❌ Erreur recalcul signalement ${signalement.id}:`, error);
       }
     }
 
-    return { processed, withRotation, autoVerified };
+    console.log(`✅ Recalcul terminé:`, {
+      processed,
+      withRotation,
+      ecoulement,
+      aVerifier,
+      pourcentageEcoulement: processed > 0 ? ((ecoulement / processed) * 100).toFixed(1) + '%' : '0%'
+    });
+    
+    return { processed, withRotation, ecoulement, aVerifier };
   }
 
   /**
@@ -215,41 +265,5 @@ export class UrgencyCalculator {
     const years = end.getFullYear() - start.getFullYear();
     const months = end.getMonth() - start.getMonth();
     return Math.max(0, years * 12 + months);
-  }
-
-  /**
-   * Détermine le niveau d'urgence selon les critères
-   */
-  private static determineUrgencyLevel(
-    moisRestants: number,
-    probabiliteEcoulement: number,
-    surplus: number,
-    quantiteTotal: number
-  ): UrgencyLevel {
-    
-    // Si très probablement écoulé
-    if (probabiliteEcoulement >= SEUIL_VERIFICATION) {
-      return moisRestants <= 3 ? 'medium' : 'low';
-    }
-    
-    // Pourcentage de surplus
-    const pctSurplus = (surplus / quantiteTotal) * 100;
-    
-    if (pctSurplus >= 80) {
-      // 80%+ restera probablement
-      if (moisRestants <= 2) return 'critical';
-      if (moisRestants <= 6) return 'high';
-      return 'medium';
-    } else if (pctSurplus >= 50) {
-      // 50%+ restera probablement
-      if (moisRestants <= 1) return 'critical';
-      if (moisRestants <= 4) return 'high';
-      return 'medium';
-    } else {
-      // Situation normale avec rotation
-      if (moisRestants <= 1) return 'high';
-      if (moisRestants <= 3) return 'medium';
-      return 'low';
-    }
   }
 }

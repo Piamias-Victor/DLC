@@ -1,4 +1,4 @@
-// prisma/schema.prisma - Version complète avec rotation
+// prisma/schema.prisma - Version avec ECOULEMENT
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,6 +13,7 @@ enum SignalementStatus {
   EN_COURS
   A_DESTOCKER
   A_VERIFIER
+  ECOULEMENT    // NOUVEAU : 100% de chances d'écoulement
   DETRUIT
 }
 
@@ -24,8 +25,8 @@ model Signalement {
   commentaire         String?
   status              SignalementStatus @default(EN_ATTENTE)
   
-  // Nouveaux champs rotation
-  urgenceCalculee     String?           // 'low', 'medium', 'high', 'critical'
+  // Champs rotation et urgence - 'ecoulement' ajouté comme valeur possible
+  urgenceCalculee     String?           // 'low', 'medium', 'high', 'critical', 'ecoulement'
   probabiliteEcoulement Decimal?        @db.Decimal(5,2)
   
   createdAt           DateTime          @default(now())
@@ -35,7 +36,7 @@ model Signalement {
   @@index([status])
   @@index([urgenceCalculee])
   @@index([probabiliteEcoulement(sort: Desc)])
-  @@index([codeBarres]) // Pour lookup rotation
+  @@index([codeBarres])
   @@index([urgenceCalculee, status])
   @@map("signalements")
 }

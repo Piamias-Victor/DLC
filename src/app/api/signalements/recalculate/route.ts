@@ -22,7 +22,6 @@ export async function POST(request: NextRequest) {
         stats: {
           processed: result.processed,
           withRotation: result.withRotation,
-          autoVerified: result.autoVerified,
           withoutRotation: result.processed - result.withRotation
         }
       });
