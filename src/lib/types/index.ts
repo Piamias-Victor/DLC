@@ -37,7 +37,15 @@ export type ProductRotation = PrismaProductRotation;
 
 // Types étendus avec rotation
 export interface SignalementWithRotation extends Signalement {
-  rotation?: ProductRotation;
+  rotation?: {
+    id: string;
+    ean13: string;
+    rotationMensuelle: number; // 🔄 Changé de Decimal à number
+    derniereMAJ: string;       // 🔄 Changé de Date à string
+    prixAchatUnitaire?: number | null; // 🆕 Ajouté pour le prix
+    createdAt?: Date;          // 🔄 Optionnel
+    updatedAt?: Date;          // 🔄 Optionnel
+  } | null; // 🔄 Autorise null explicitement
 }
 
 // Types pour calculs d'urgence
@@ -171,13 +179,6 @@ export interface SignalementUpdateData {
   datePeremption?: Date;
   commentaire?: string;
   status?: SignalementStatus;
-}
-
-// src/lib/types/index.ts - Ajout des types prix
-
-// Type étendu pour rotation avec prix
-export interface ProductRotationWithPrice extends ProductRotation {
-  prixAchatUnitaire: number | null;
 }
 
 // Type pour import rotation avec prix flexible

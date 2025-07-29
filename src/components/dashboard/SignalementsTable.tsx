@@ -1,4 +1,4 @@
-// src/components/dashboard/SignalementsTable.tsx - Avec tri cliquable
+// src/components/dashboard/SignalementsTable.tsx - Avec tri cliquable et perte financière
 import { useState } from 'react';
 import { Package, Eye, Trash2, TrendingUp, Info, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../atoms/Card';
@@ -6,17 +6,8 @@ import { StatusBadge } from '../molecules/StatusBadge';
 import { UrgencyBadge } from './UrgencyBadge';
 import { UrgencyDisplay, RotationInfo } from '../rotation/UrgencyDisplay';
 import { SignalementModal } from './SignalementModal';
-import { Signalement, SortField, SortDirection, SortConfig } from '@/lib/types';
-
-// Import du type étendu
-interface SignalementWithRotation extends Signalement {
-  rotation?: {
-    id: string;
-    ean13: string;
-    rotationMensuelle: number;
-    derniereMAJ: string;
-  } | null;
-}
+import { calculerPerteFinanciere, formaterMontantPerte, getCouleurPerte } from '@/lib/utils/perteFinanciere';
+import { Signalement, SortField, SortDirection, SortConfig, SignalementWithRotation } from '@/lib/types';
 
 interface SignalementsTableProps {
   signalements: SignalementWithRotation[];
@@ -28,7 +19,7 @@ interface SignalementsTableProps {
   hasActiveFilters: boolean;
 }
 
-// Configuration des colonnes triables
+// Configuration des colonnes triables AVEC perte financière
 const SORTABLE_COLUMNS: Record<SortField, { label: string; tooltip?: string }> = {
   codeBarres: { label: 'Code', tooltip: 'Trier par code-barres' },
   quantite: { label: 'Quantité', tooltip: 'Trier par quantité' },
@@ -36,6 +27,7 @@ const SORTABLE_COLUMNS: Record<SortField, { label: string; tooltip?: string }> =
   status: { label: 'Statut', tooltip: 'Trier par statut' },
   urgenceCalculee: { label: 'Urgence calculée', tooltip: 'Trier par urgence' },
   probabiliteEcoulement: { label: 'Prob. écoulement', tooltip: 'Trier par probabilité d\'écoulement' },
+  perteFinanciere: { label: 'Perte €', tooltip: 'Trier par montant de perte financière calculé' },
   createdAt: { label: 'Créé le', tooltip: 'Trier par date de création' }
 };
 
@@ -59,22 +51,33 @@ export function SignalementsTable({
     }));
   };
 
-  // Tri des signalements
+  // Tri des signalements AVEC perte financière
   const sortedSignalements = [...signalements].sort((a, b) => {
     const { field, direction } = sortConfig;
-    let aValue: unknown = a[field];
-    let bValue: unknown = b[field];
+    let aValue: any;
+    let bValue: any;
 
+    // 🆕 Tri spécial pour perte financière
+    if (field === 'perteFinanciere') {
+      const perteA = calculerPerteFinanciere(a);
+      const perteB = calculerPerteFinanciere(b);
+      aValue = perteA?.montantPerte || 0;
+      bValue = perteB?.montantPerte || 0;
+    }
     // Gestion spéciale pour certains champs
-    if (field === 'datePeremption' || field === 'createdAt') {
-      aValue = new Date(aValue as string | number | Date).getTime();
-      bValue = new Date(bValue as string | number | Date).getTime();
+    else if (field === 'datePeremption' || field === 'createdAt') {
+      aValue = new Date(a[field] as string | number | Date).getTime();
+      bValue = new Date(b[field] as string | number | Date).getTime();
     } else if (field === 'quantite' || field === 'probabiliteEcoulement') {
-      aValue = Number(aValue) || 0;
-      bValue = Number(bValue) || 0;
-    } else if (typeof aValue === 'string') {
-      aValue = aValue.toLowerCase();
-      bValue = typeof bValue === 'string' ? bValue.toLowerCase() : '';
+      aValue = Number(a[field as keyof SignalementWithRotation]) || 0;
+      bValue = Number(b[field as keyof SignalementWithRotation]) || 0;
+    } else {
+      aValue = a[field as keyof SignalementWithRotation];
+      bValue = b[field as keyof SignalementWithRotation];
+      if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = typeof bValue === 'string' ? bValue.toLowerCase() : '';
+      }
     }
 
     if (typeof aValue === 'number' && typeof bValue === 'number') {
@@ -166,6 +169,7 @@ export function SignalementsTable({
                     <th className="text-left py-3 px-4 font-medium text-gray-600">Rotation</th>
                     <SortableHeader field="urgenceCalculee">Urgence calculée</SortableHeader>
                     <SortableHeader field="probabiliteEcoulement">Prob. écoulement</SortableHeader>
+                    <SortableHeader field="perteFinanciere">Perte €</SortableHeader>
                     <SortableHeader field="createdAt">Créé le</SortableHeader>
                     <th className="text-left py-3 px-4 font-medium text-gray-600">Actions</th>
                   </tr>
@@ -230,12 +234,16 @@ function SignalementRow({
 }: SignalementRowProps) {
   // État pour afficher le tooltip de rotation
   const [showRotationTooltip, setShowRotationTooltip] = useState(false);
+  const [showPerteTooltip, setShowPerteTooltip] = useState(false);
 
   // Vraies données de rotation depuis le signalement étendu
   const signalementWithRotation = signalement as SignalementWithRotation;
   const rotation = signalementWithRotation.rotation;
   const hasRotation = !!rotation;
   const rotationValue = rotation ? Number(rotation.rotationMensuelle) : null;
+
+  // 🆕 Calculer la perte financière
+  const perteFinanciere = calculerPerteFinanciere(signalement);
 
   return (
     <tr 
@@ -341,6 +349,42 @@ function SignalementRow({
         ) : (
           <span className="text-xs text-gray-400">-</span>
         )}
+      </td>
+      
+      {/* 🆕 Colonne Perte Financière */}
+      <td className="py-4 px-4 relative">
+        <div 
+          className="flex items-center gap-1"
+          onMouseEnter={() => setShowPerteTooltip(true)}
+          onMouseLeave={() => setShowPerteTooltip(false)}
+        >
+          {perteFinanciere ? (
+            <div className="flex items-center gap-1">
+              <span className={`text-sm font-medium ${getCouleurPerte(perteFinanciere.niveauPerte)}`}>
+                {formaterMontantPerte(perteFinanciere.montantPerte)}
+              </span>
+              {perteFinanciere.niveauPerte === 'critical' && (
+                <span className="text-red-600" title="Perte critique">⚠️</span>
+              )}
+            </div>
+          ) : (
+            <span className="text-xs text-gray-400">-</span>
+          )}
+          
+          {/* Tooltip perte financière */}
+          {showPerteTooltip && perteFinanciere && (
+            <div className="absolute top-full left-0 mt-1 z-10 p-2 bg-black text-white text-xs rounded shadow-lg whitespace-nowrap">
+              <div className="space-y-1">
+                <div>Quantité perdue: {perteFinanciere.quantitePerdue.toFixed(1)} unités</div>
+                <div>Prix unitaire: {rotation?.prixAchatUnitaire ? Number(rotation.prixAchatUnitaire).toFixed(2) : '?'}€</div>
+                <div>Montant total: {formaterMontantPerte(perteFinanciere.montantPerte)}</div>
+                <div className={`font-medium ${getCouleurPerte(perteFinanciere.niveauPerte)}`}>
+                  Niveau: {perteFinanciere.niveauPerte}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </td>
       
       <td className="py-4 px-4 text-sm text-gray-600">
