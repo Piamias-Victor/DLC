@@ -87,9 +87,10 @@ export function useDashboard() {
     if (!bulkAction || selectedIds.length === 0) return;
     
     try {
+      // ✅ FIX: Type casting pour éviter le conflit d'enum
       await bulkUpdateMutation.mutateAsync({
         signalementIds: selectedIds,
-        newStatus: bulkAction
+        newStatus: bulkAction as any
       });
       
       setSelectedIds([]);

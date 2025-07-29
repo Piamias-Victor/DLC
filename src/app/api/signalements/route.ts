@@ -129,9 +129,9 @@ export async function GET(request: NextRequest) {
 
     console.log(`📊 Résultats avec filtre pourcentage: ${signalements.length}/${total} signalements`);
 
-    // Statistiques spéciales avec pourcentage
+    // ✅ FIX: Statistiques spéciales avec pourcentage - TYPE CASTING
     const statsEcoulement = {
-      totalEcoulement: signalements.filter(s => s.status === 'ECOULEMENT').length,
+      totalEcoulement: signalements.filter(s => (s.status as string) === 'ECOULEMENT').length,
       urgenceEcoulement: signalements.filter(s => s.urgenceCalculee === 'ecoulement').length,
       probabilite100: signalements.filter(s => s.probabiliteEcoulement && Number(s.probabiliteEcoulement) >= 100).length,
       sansRotation: filters.avecRotation ? signalements.length : 0,

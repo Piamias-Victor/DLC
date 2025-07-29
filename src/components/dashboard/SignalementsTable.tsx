@@ -62,23 +62,31 @@ export function SignalementsTable({
   // Tri des signalements
   const sortedSignalements = [...signalements].sort((a, b) => {
     const { field, direction } = sortConfig;
-    let aValue: any = a[field];
-    let bValue: any = b[field];
+    let aValue: unknown = a[field];
+    let bValue: unknown = b[field];
 
     // Gestion spéciale pour certains champs
     if (field === 'datePeremption' || field === 'createdAt') {
-      aValue = new Date(aValue).getTime();
-      bValue = new Date(bValue).getTime();
+      aValue = new Date(aValue as string | number | Date).getTime();
+      bValue = new Date(bValue as string | number | Date).getTime();
     } else if (field === 'quantite' || field === 'probabiliteEcoulement') {
       aValue = Number(aValue) || 0;
       bValue = Number(bValue) || 0;
     } else if (typeof aValue === 'string') {
       aValue = aValue.toLowerCase();
-      bValue = bValue?.toLowerCase() || '';
+      bValue = typeof bValue === 'string' ? bValue.toLowerCase() : '';
     }
 
-    if (aValue < bValue) return direction === 'asc' ? -1 : 1;
-    if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+    if (typeof aValue === 'number' && typeof bValue === 'number') {
+      if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+      return 0;
+    }
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+      return 0;
+    }
     return 0;
   });
 

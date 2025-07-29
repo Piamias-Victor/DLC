@@ -1,4 +1,4 @@
-// src/components/dashboard/BulkActions.tsx - Avec ECOULEMENT
+// src/components/dashboard/BulkActions.tsx - Avec type casting
 import { Users, Settings, X, Droplets } from 'lucide-react';
 import { Button } from '../atoms/Button';
 import { Card, CardContent } from '../atoms/Card';
@@ -79,12 +79,12 @@ export function BulkActions({
                 key={config.value}
                 variant={config.value === 'DETRUIT' ? 'primary' : 'outline'}
                 size="sm"
-                onClick={() => onBulkAction(config.value)}
+                onClick={() => onBulkAction(config.value as SignalementStatus)}
                 isLoading={isLoading}
-                className={getButtonStyles(config.value)}
+                className={getButtonStyles(config.value as SignalementStatus)} 
                 title={config.description}
               >
-                {getStatusIcon(config.value)}
+                {getStatusIcon(config.value as SignalementStatus)} {/* ✅ Type casting */}
                 {config.label}
               </Button>
             ))}

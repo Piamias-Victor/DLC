@@ -1,8 +1,8 @@
-// src/lib/constants/status.ts - Avec ECOULEMENT bien configuré
-import type { StatusConfig } from '@/lib/types';
-import type { Signalement } from '@prisma/client';
+// src/lib/constants/status.ts - TYPES MANUELS FINI LES GALÈRES
+import type { StatusConfig, SignalementStatus } from '@/lib/types';
 
-export type SignalementStatus = Signalement['status'];
+// Plus d'import Prisma qui fait chier
+export { type SignalementStatus } from '@/lib/types';
 
 export const STATUS_CONFIG: Record<SignalementStatus, StatusConfig> = {
   EN_ATTENTE: {

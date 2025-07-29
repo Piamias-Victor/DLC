@@ -1,4 +1,4 @@
-// src/lib/types/index.ts - Avec filtre pourcentage écoulement
+// src/lib/types/index.ts - AVEC TYPES MANUELS
 import type { Signalement as PrismaSignalement, ProductRotation as PrismaProductRotation } from '@prisma/client';
 
 export interface ParsedCode {
@@ -11,8 +11,15 @@ export interface ParsedCode {
   serialNumber?: string;
 }
 
-// Types de base
-export type SignalementStatus = PrismaSignalement['status'];
+// ✅ TYPES MANUELS - FINI LES GALÈRES
+export type SignalementStatus = 
+  | 'EN_ATTENTE' 
+  | 'EN_COURS' 
+  | 'A_DESTOCKER' 
+  | 'A_VERIFIER' 
+  | 'ECOULEMENT' 
+  | 'DETRUIT';
+
 export type UrgencyLevel = 'low' | 'medium' | 'high' | 'critical' | 'ecoulement';
 export type CodeType = 'EAN13' | 'DATA_MATRIX' | 'UNKNOWN';
 
@@ -82,13 +89,13 @@ export interface RotationImportResult {
 export interface DashboardFilters {
   search: string;
   status: SignalementStatus[] | 'ALL';
-  urgency: UrgencyLevel[] | 'ALL'; // Gardé pour rétrocompatibilité
-  urgenceCalculee: UrgencyLevel[] | 'ALL'; // Principal filtre d'urgence
+  urgency: UrgencyLevel[] | 'ALL';
+  urgenceCalculee: UrgencyLevel[] | 'ALL';
   datePeremptionFrom: string;
   datePeremptionTo: string;
   quantiteMin: string;
   quantiteMax: string;
-  probabiliteEcoulementMax: string; // 🔥 NOUVEAU : Filtre pourcentage max
+  probabiliteEcoulementMax: string;
   avecRotation: boolean;
 }
 

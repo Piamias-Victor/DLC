@@ -20,7 +20,8 @@ function calculateStats(signalements: Signalement[]): Stats {
     total: signalements.length,
     enAttente: signalements.filter(s => s.status === 'EN_ATTENTE').length,
     enCours: signalements.filter(s => s.status === 'EN_COURS').length,
-    ecoulement: signalements.filter(s => s.status === 'ECOULEMENT').length,
+    // ✅ FIX: Type casting pour ECOULEMENT
+    ecoulement: signalements.filter(s => s.status === ('ECOULEMENT' as Signalement['status'])).length,
     critique: signalements.filter(s => 
       s.urgenceCalculee === 'critical' || getUrgency(s.datePeremption, s.quantite) === 'critical'
     ).length,
@@ -119,11 +120,6 @@ export function DashboardStats({ signalements }: DashboardStatsProps) {
                   {stat.value}
                 </p>
                 
-                {stat.subtitle && (
-                  <p className={`text-xs ${stat.color} font-medium`}>
-                    {stat.subtitle}
-                  </p>
-                )}
               </div>
             </div>
           </CardContent>

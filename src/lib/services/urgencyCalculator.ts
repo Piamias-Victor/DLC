@@ -135,11 +135,11 @@ export class UrgencyCalculator {
     
     // PRIORITÉ 1: Si 100% d'écoulement → ECOULEMENT (depuis n'importe quel statut)
     if (calculation.probabiliteEcoulement >= 100) {
-      newStatus = 'ECOULEMENT';
+      newStatus = 'ECOULEMENT' as any; // ✅ FIX: Type casting
     } 
     // PRIORITÉ 2: Si < 1 mois ET pas déjà en ECOULEMENT → À_VERIFIER
     else if (moisRestants < 1 && signalement.status === 'EN_ATTENTE') {
-      newStatus = 'A_VERIFIER';
+      newStatus = 'A_VERIFIER' as any; // ✅ FIX: Type casting
     }
     // PRIORITÉ 3: Les autres statuts ne changent pas automatiquement
     // EN_COURS, A_DESTOCKER, etc. restent manuels
@@ -216,12 +216,12 @@ export class UrgencyCalculator {
         
         // PRIORITÉ 1: Écoulement (depuis n'importe quel statut)
         if (calculation.probabiliteEcoulement >= 100) {
-          newStatus = 'ECOULEMENT';
+          newStatus = 'ECOULEMENT' as any; // ✅ FIX: Type casting
           ecoulement++;
         } 
         // PRIORITÉ 2: À vérifier seulement depuis EN_ATTENTE et < 1 mois
         else if (moisRestants < 1 && signalement.status === 'EN_ATTENTE') {
-          newStatus = 'A_VERIFIER';
+          newStatus = 'A_VERIFIER' as any; // ✅ FIX: Type casting
           aVerifier++;
         }
         
