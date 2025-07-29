@@ -1,4 +1,3 @@
-// prisma/schema.prisma - Version avec ECOULEMENT
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,29 +7,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum SignalementStatus {
-  EN_ATTENTE
-  EN_COURS
-  A_DESTOCKER
-  A_VERIFIER
-  ECOULEMENT    // NOUVEAU : 100% de chances d'écoulement
-  DETRUIT
-}
-
 model Signalement {
-  id                   String            @id @default(cuid())
-  codeBarres          String
-  quantite            Int
-  datePeremption      DateTime
-  commentaire         String?
-  status              SignalementStatus @default(EN_ATTENTE)
-  
-  // Champs rotation et urgence - 'ecoulement' ajouté comme valeur possible
-  urgenceCalculee     String?           // 'low', 'medium', 'high', 'critical', 'ecoulement'
-  probabiliteEcoulement Decimal?        @db.Decimal(5,2)
-  
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  id                    String            @id @default(cuid())
+  codeBarres            String
+  quantite              Int
+  datePeremption        DateTime
+  commentaire           String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  status                SignalementStatus @default(EN_ATTENTE)
+  probabiliteEcoulement Decimal?          @db.Decimal(5, 2)
+  urgenceCalculee       String?
 
   @@index([createdAt(sort: Desc)])
   @@index([status])
@@ -38,17 +25,29 @@ model Signalement {
   @@index([probabiliteEcoulement(sort: Desc)])
   @@index([codeBarres])
   @@index([urgenceCalculee, status])
+  @@index([urgenceCalculee, status], map: "signalements_urgence_status_idx")
   @@map("signalements")
 }
 
 model ProductRotation {
   id                String   @id @default(cuid())
-  ean13            String   @unique
-  rotationMensuelle Decimal  @db.Decimal(8,2)
-  derniereMAJ      DateTime @default(now())
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  ean13             String   @unique
+  rotationMensuelle Decimal  @db.Decimal(8, 2)
+  derniereMAJ       DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  prixAchatUnitaire Decimal? @db.Decimal(8, 2)
 
   @@index([derniereMAJ(sort: Desc)])
+  @@index([prixAchatUnitaire(sort: Desc)])
   @@map("product_rotations")
+}
+
+enum SignalementStatus {
+  EN_ATTENTE
+  EN_COURS
+  A_DESTOCKER
+  DETRUIT
+  A_VERIFIER
+  ECOULEMENT
 }

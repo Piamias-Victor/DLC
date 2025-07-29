@@ -1,14 +1,125 @@
-// src/lib/services/urgencyCalculator.ts - Logique ULTRA-NUANCÉE
+// src/lib/services/urgencyCalculator.ts - AVEC LOGIQUE PRIX CORRECTE
 import { prisma } from '@/lib/prisma/client';
 import { RotationService } from './rotationService';
+import { getFinancialUrgencyLevel } from '@/lib/constants/urgencyThresholds';
 import type { UrgencyCalculation, UrgencyLevel, Signalement } from '@/lib/types';
 
 const RESPECT_FIFO = 0.65; // 65% de respect du FIFO
 
+// Type étendu pour calcul avec prix
+interface UrgencyCalculationWithPrice extends UrgencyCalculation {
+  perteFinanciere?: {
+    quantitePerdue: number;
+    prixUnitaire: number;
+    montantPerte: number;
+    niveauPerte: 'low' | 'medium' | 'high' | 'critical';
+  };
+  urgenceAjustee?: UrgencyLevel; // Urgence finale après prise en compte du prix
+}
+
 export class UrgencyCalculator {
   
   /**
-   * Calcule l'urgence avec rotation - LOGIQUE ULTRA-NUANCÉE
+   * 🆕 Calcule l'urgence AVEC prix d'achat - LOGIQUE CORRECTE
+   */
+  static calculateUrgencyWithPrice(
+    quantite: number,
+    datePeremption: Date,
+    rotationMensuelle: number,
+    prixAchatUnitaire: number
+  ): UrgencyCalculationWithPrice {
+    
+    const aujourdhui = new Date();
+    const moisRestants = this.calculateMonthsDiff(aujourdhui, datePeremption);
+    
+    // 1. Quantité théoriquement vendue
+    const quantiteTheorique = rotationMensuelle * moisRestants;
+    const quantiteAvecFifo = quantiteTheorique * RESPECT_FIFO;
+    const probabiliteEcoulement = Math.min(100, (quantiteAvecFifo / quantite) * 100);
+    
+    // 2. PRIORITÉ ABSOLUE : Si 100% d'écoulement, on garde ECOULEMENT
+    if (probabiliteEcoulement >= 100) {
+      return {
+        urgence: 'ecoulement',
+        probabiliteEcoulement: Math.round(probabiliteEcoulement * 100) / 100,
+        shouldAutoVerify: false,
+        reasoning: {
+          moisRestants,
+          quantiteTheorique: Math.round(quantiteTheorique),
+          quantiteAvecFifo: Math.round(quantiteAvecFifo),
+          surplus: 0
+        },
+        urgenceAjustee: 'ecoulement'
+      };
+    }
+    
+    // 3. 🔥 LOGIQUE CORRECTE : Calculer quantité qui va RESTER (= perte réelle)
+    const quantiteQuiVaRester = Math.max(0, quantite - quantiteAvecFifo);
+    const montantPerte = quantiteQuiVaRester * prixAchatUnitaire;
+    const niveauPerteFinanciere = getFinancialUrgencyLevel(montantPerte);
+    
+    // 4. 🎯 URGENCE BASÉE SUR LE MONTANT DE PERTE
+    let urgenceFinale: UrgencyLevel;
+    
+    // Si très proche de la péremption (< 1 mois), on reste sévère
+    if (moisRestants < 1) {
+      if (niveauPerteFinanciere === 'critical') {
+        urgenceFinale = 'critical';
+      } else if (niveauPerteFinanciere === 'high') {
+        urgenceFinale = 'high';
+      } else if (niveauPerteFinanciere === 'medium') {
+        urgenceFinale = 'medium';
+      } else {
+        urgenceFinale = 'low';
+      }
+    } 
+    // Si on a du temps, l'urgence dépend principalement du montant
+    else {
+      if (niveauPerteFinanciere === 'critical') {
+        urgenceFinale = 'critical';  // > 500€ = toujours critique
+      } else if (niveauPerteFinanciere === 'high') {
+        urgenceFinale = 'high';      // 200-500€ = élevé
+      } else if (niveauPerteFinanciere === 'medium') {
+        urgenceFinale = 'medium';    // 50-200€ = moyen
+      } else {
+        urgenceFinale = 'low';       // < 50€ = faible
+      }
+    }
+    
+    console.log(`💰 Urgence avec prix:`, {
+      quantite,
+      moisRestants,
+      quantiteTheorique: Math.round(quantiteTheorique),
+      quantiteAvecFifo: Math.round(quantiteAvecFifo),
+      quantiteQuiVaRester,
+      prixUnitaire: prixAchatUnitaire,
+      montantPerte: Math.round(montantPerte * 100) / 100,
+      niveauPerteFinanciere,
+      urgenceFinale
+    });
+    
+    return {
+      urgence: urgenceFinale, // Pour compatibilité
+      urgenceAjustee: urgenceFinale,
+      probabiliteEcoulement: Math.round(probabiliteEcoulement * 100) / 100,
+      shouldAutoVerify: false,
+      reasoning: {
+        moisRestants,
+        quantiteTheorique: Math.round(quantiteTheorique),
+        quantiteAvecFifo: Math.round(quantiteAvecFifo),
+        surplus: Math.round(quantiteQuiVaRester)
+      },
+      perteFinanciere: {
+        quantitePerdue: quantiteQuiVaRester,
+        prixUnitaire: prixAchatUnitaire,
+        montantPerte: Math.round(montantPerte * 100) / 100,
+        niveauPerte: niveauPerteFinanciere
+      }
+    };
+  }
+
+  /**
+   * Calcule l'urgence avec rotation - LOGIQUE ULTRA-NUANCÉE (existant)
    */
   static calculateUrgencyWithRotation(
     quantite: number,
@@ -161,7 +272,7 @@ export class UrgencyCalculator {
   }
 
   /**
-   * Met à jour l'urgence d'un signalement - LOGIQUE À_VERIFIER NUANCÉE
+   * 🔄 Met à jour l'urgence d'un signalement - AVEC PRIX SI DISPONIBLE
    */
   static async updateSignalementUrgency(signalementId: string): Promise<void> {
     const signalement = await prisma.signalement.findUnique({
@@ -174,17 +285,27 @@ export class UrgencyCalculator {
     
     const rotation = await RotationService.getRotationByEan13(signalement.codeBarres);
     
-    let calculation: UrgencyCalculation;
+    let calculation: UrgencyCalculationWithPrice | UrgencyCalculation;
     let newStatus = signalement.status;
     
-    // Calculer urgence
-    if (rotation) {
+    // 🆕 Calculer urgence avec prix si disponible
+    if (rotation && rotation.prixAchatUnitaire) {
+      // CALCUL AVEC PRIX
+      calculation = this.calculateUrgencyWithPrice(
+        signalement.quantite,
+        signalement.datePeremption,
+        Number(rotation.rotationMensuelle),
+        Number(rotation.prixAchatUnitaire)
+      );
+    } else if (rotation) {
+      // CALCUL AVEC ROTATION SANS PRIX
       calculation = this.calculateUrgencyWithRotation(
         signalement.quantite,
         signalement.datePeremption,
         Number(rotation.rotationMensuelle)
       );
     } else {
+      // CALCUL CLASSIQUE
       calculation = this.calculateClassicUrgency(
         signalement.quantite,
         signalement.datePeremption
@@ -195,13 +316,15 @@ export class UrgencyCalculator {
     const aujourdhui = new Date();
     const moisRestants = this.calculateMonthsDiff(aujourdhui, signalement.datePeremption);
     
+    const urgenceFinale = (calculation as UrgencyCalculationWithPrice).urgenceAjustee || calculation.urgence;
+    
     // PRIORITÉ 1: Si 100% d'écoulement → ECOULEMENT
     if (calculation.probabiliteEcoulement >= 100) {
       newStatus = 'ECOULEMENT' as any;
     } 
     // PRIORITÉ 2: À_VERIFIER seulement si vraiment critique ET proche
     else if (moisRestants < 1 && 
-             calculation.urgence === 'critical' && 
+             urgenceFinale === 'critical' && 
              signalement.status === 'EN_ATTENTE') {
       newStatus = 'A_VERIFIER' as any;
     }
@@ -212,20 +335,22 @@ export class UrgencyCalculator {
       quantite: signalement.quantite,
       moisRestants,
       rotation: rotation ? Number(rotation.rotationMensuelle) : null,
+      prixAchat: rotation?.prixAchatUnitaire ? Number(rotation.prixAchatUnitaire) : null,
+      perteFinanciere: (calculation as UrgencyCalculationWithPrice).perteFinanciere?.montantPerte || null,
       probabiliteEcoulement: calculation.probabiliteEcoulement,
       urgenceAvant: signalement.urgenceCalculee,
-      urgenceApres: calculation.urgence,
+      urgenceApres: urgenceFinale,
       statusAvant: signalement.status,
       statusApres: newStatus,
       raison: calculation.probabiliteEcoulement >= 100 ? 'ECOULEMENT_100%' : 
-             (moisRestants < 1 && calculation.urgence === 'critical' && signalement.status === 'EN_ATTENTE') ? 'A_VERIFIER_CRITIQUE' : 'INCHANGE'
+             (moisRestants < 1 && urgenceFinale === 'critical' && signalement.status === 'EN_ATTENTE') ? 'A_VERIFIER_CRITIQUE' : 'INCHANGE'
     });
     
     // Mise à jour en base
     await prisma.$executeRaw`
       UPDATE signalements 
       SET 
-        "urgenceCalculee" = ${calculation.urgence}::text,
+        "urgenceCalculee" = ${urgenceFinale}::text,
         "probabiliteEcoulement" = ${calculation.probabiliteEcoulement}::decimal(5,2),
         "status" = ${newStatus}::"SignalementStatus",
         "updatedAt" = NOW()
@@ -234,11 +359,12 @@ export class UrgencyCalculator {
   }
 
   /**
-   * Recalcule toutes les urgences
+   * Recalcule toutes les urgences AVEC PRIX
    */
   static async recalculateAllUrgencies(): Promise<{
     processed: number;
     withRotation: number;
+    withPrice: number;
     ecoulement: number;
     aVerifier: number;
   }> {
@@ -248,10 +374,11 @@ export class UrgencyCalculator {
 
     let processed = 0;
     let withRotation = 0;
+    let withPrice = 0;
     let ecoulement = 0;
     let aVerifier = 0;
 
-    console.log(`🔄 Recalcul ULTRA-INDULGENT démarré: ${signalements.length} signalements`);
+    console.log(`🔄 Recalcul AVEC PRIX démarré: ${signalements.length} signalements`);
 
     for (const signalement of signalements) {
       try {
@@ -267,9 +394,12 @@ export class UrgencyCalculator {
           if (updated.status === ('A_VERIFIER' as any)) aVerifier++;
         }
         
-        // Vérifier si rotation
+        // Vérifier si rotation et prix
         const rotation = await RotationService.getRotationByEan13(signalement.codeBarres);
-        if (rotation) withRotation++;
+        if (rotation) {
+          withRotation++;
+          if (rotation.prixAchatUnitaire) withPrice++;
+        }
         
         processed++;
         
@@ -282,18 +412,20 @@ export class UrgencyCalculator {
       }
     }
 
-    console.log(`✅ Recalcul ULTRA-INDULGENT terminé:`, {
+    console.log(`✅ Recalcul AVEC PRIX terminé:`, {
       processed,
       withRotation,
+      withPrice,
       ecoulement,
       aVerifier,
       distribution: {
         ecoulement: ((ecoulement / processed) * 100).toFixed(1) + '%',
-        aVerifier: ((aVerifier / processed) * 100).toFixed(1) + '%'
+        aVerifier: ((aVerifier / processed) * 100).toFixed(1) + '%',
+        withPrice: ((withPrice / processed) * 100).toFixed(1) + '%'
       }
     });
     
-    return { processed, withRotation, ecoulement, aVerifier };
+    return { processed, withRotation, withPrice, ecoulement, aVerifier };
   }
 
   /**

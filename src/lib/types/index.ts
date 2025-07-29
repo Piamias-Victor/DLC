@@ -37,7 +37,15 @@ export type ProductRotation = PrismaProductRotation;
 
 // Types étendus avec rotation
 export interface SignalementWithRotation extends Signalement {
-  rotation?: ProductRotation;
+  rotation?: {
+    id: string;
+    ean13: string;
+    rotationMensuelle: number; // 🔄 Changé de Decimal à number
+    derniereMAJ: string;       // 🔄 Changé de Date à string
+    prixAchatUnitaire?: number | null; // 🆕 Ajouté pour le prix
+    createdAt?: Date;          // 🔄 Optionnel
+    updatedAt?: Date;          // 🔄 Optionnel
+  } | null; // 🔄 Autorise null explicitement
 }
 
 // Types pour calculs d'urgence
@@ -100,7 +108,7 @@ export interface DashboardFilters {
 }
 
 // Type pour le tri des colonnes
-export type SortField = 'codeBarres' | 'quantite' | 'datePeremption' | 'status' | 'urgenceCalculee' | 'probabiliteEcoulement' | 'createdAt';
+export type SortField = 'codeBarres' | 'quantite' | 'datePeremption' | 'status' | 'urgenceCalculee' | 'probabiliteEcoulement' | 'perteFinanciere' | 'createdAt';
 export type SortDirection = 'asc' | 'desc';
 
 export interface SortConfig {
@@ -171,4 +179,25 @@ export interface SignalementUpdateData {
   datePeremption?: Date;
   commentaire?: string;
   status?: SignalementStatus;
+}
+
+// Type pour import rotation avec prix flexible
+export interface RotationImportData {
+  ean13: string;
+  rotationMensuelle: number;
+  prixAchatUnitaire?: number; // 🆕 Optionnel pour rétro-compatibilité
+}
+
+// Type pour calcul de perte financière
+export interface PerteFinanciere {
+  quantitePerdue: number;
+  prixUnitaire: number;
+  montantPerte: number;
+  niveauPerte: 'faible' | 'moyen' | 'eleve' | 'critique';
+}
+
+// Type pour urgence avec prise en compte du prix
+export interface UrgencyCalculationWithPrice extends UrgencyCalculation {
+  perteFinanciere?: PerteFinanciere;
+  urgenceAjustee: UrgencyLevel; // Urgence finale après prise en compte du prix
 }
