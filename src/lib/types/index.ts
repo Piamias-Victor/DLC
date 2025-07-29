@@ -100,7 +100,7 @@ export interface DashboardFilters {
 }
 
 // Type pour le tri des colonnes
-export type SortField = 'codeBarres' | 'quantite' | 'datePeremption' | 'status' | 'urgenceCalculee' | 'probabiliteEcoulement' | 'createdAt';
+export type SortField = 'codeBarres' | 'quantite' | 'datePeremption' | 'status' | 'urgenceCalculee' | 'probabiliteEcoulement' | 'perteFinanciere' | 'createdAt';
 export type SortDirection = 'asc' | 'desc';
 
 export interface SortConfig {

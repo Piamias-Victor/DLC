@@ -227,7 +227,7 @@ export class RotationService {
         }
 
         // Extraire EAN13 et rotation
-        let ean13 = parts[0].replace(/\s+/g, '').replace(/[^0-9]/g, '');
+        const ean13 = parts[0].replace(/\s+/g, '').replace(/[^0-9]/g, '');
         const rotationStr = parts[1].replace(',', '.');
         const rotation = parseFloat(rotationStr);
 
