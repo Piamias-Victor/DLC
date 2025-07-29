@@ -172,3 +172,31 @@ export interface SignalementUpdateData {
   commentaire?: string;
   status?: SignalementStatus;
 }
+
+// src/lib/types/index.ts - Ajout des types prix
+
+// Type étendu pour rotation avec prix
+export interface ProductRotationWithPrice extends ProductRotation {
+  prixAchatUnitaire: number | null;
+}
+
+// Type pour import rotation avec prix flexible
+export interface RotationImportData {
+  ean13: string;
+  rotationMensuelle: number;
+  prixAchatUnitaire?: number; // 🆕 Optionnel pour rétro-compatibilité
+}
+
+// Type pour calcul de perte financière
+export interface PerteFinanciere {
+  quantitePerdue: number;
+  prixUnitaire: number;
+  montantPerte: number;
+  niveauPerte: 'faible' | 'moyen' | 'eleve' | 'critique';
+}
+
+// Type pour urgence avec prise en compte du prix
+export interface UrgencyCalculationWithPrice extends UrgencyCalculation {
+  perteFinanciere?: PerteFinanciere;
+  urgenceAjustee: UrgencyLevel; // Urgence finale après prise en compte du prix
+}
