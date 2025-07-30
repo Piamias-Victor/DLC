@@ -58,25 +58,49 @@ export function useZebraScanner(options: ZebraScannerOptions) {
    onScan(cleanCode);
  }, [onScan, onError, minLength, maxLength]);
 
- // Gestion des événements clavier (méthode 1 - scan caractère par caractère)
+ // 🔧 CORRECTION: Gestion améliorée des événements clavier
  const handleKeyPress = useCallback((event: KeyboardEvent) => {
    if (!state.isListening) return;
 
-   console.log('⌨️ Key pressed:', { key: event.key, code: event.code, target: event.target?.constructor?.name });
+   console.log('⌨️ Key pressed:', { 
+     key: event.key, 
+     code: event.code, 
+     target: event.target?.constructor?.name 
+   });
 
-   // Enter = fin de scan
-   if (event.key === 'Enter') {
-     if (timeoutId) clearTimeout(timeoutId);
+   // 🚫 FILTRAGE des caractères de contrôle - SOLUTION AU PROBLÈME
+   const controlChars = [
+     'Enter', 'Return', 'Tab', 'Escape', 'Backspace', 'Delete',
+     'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+     'Home', 'End', 'PageUp', 'PageDown', 'Insert'
+   ];
+
+   // 🚫 Ignorer les caractères de contrôle ET les caractères \r, \n, \t
+   if (
+     controlChars.includes(event.key) || 
+     event.key === '\r' || 
+     event.key === '\n' || 
+     event.key === '\t' ||
+     event.key.length > 1 // Toute touche multi-caractères
+   ) {
+     // 🔥 IMPORTANTE: Empêcher la propagation pour éviter navigation
+     event.preventDefault();
+     event.stopPropagation();
      
-     if (buffer.length > 0) {
+     // Si c'est Enter et qu'on a un buffer, traiter
+     if (event.key === 'Enter' && buffer.length > 0) {
+       if (timeoutId) clearTimeout(timeoutId);
        processBuffer(buffer);
        setBuffer('');
      }
      return;
    }
 
-   // Ignorer les touches de contrôle
-   if (event.key.length > 1) return;
+   // ✅ Traiter SEULEMENT les caractères alphanumériques
+   if (!/^[a-zA-Z0-9]$/.test(event.key)) {
+     event.preventDefault();
+     return;
+   }
 
    // Ajouter au buffer
    const newBuffer = buffer + event.key;
@@ -95,7 +119,7 @@ export function useZebraScanner(options: ZebraScannerOptions) {
    setTimeoutId(newTimeoutId);
  }, [state.isListening, buffer, timeoutId, timeout, processBuffer, minLength]);
 
- // Gestion des événements input (méthode 2 - scan direct dans input)
+ // 🔧 CORRECTION: Input event avec meilleur filtrage
  const handleInputEvent = useCallback((event: Event) => {
    if (!state.isListening) return;
    
@@ -104,14 +128,21 @@ export function useZebraScanner(options: ZebraScannerOptions) {
      const target = inputEvent.target as HTMLInputElement;
      const value = target.value;
      
-     console.log('📝 Input event:', { value, length: value.length, lastValue: lastInputValue });
+     console.log('📝 Input event:', { 
+       value, 
+       length: value.length, 
+       lastValue: lastInputValue 
+     });
+     
+     // 🔧 Nettoyer la valeur des caractères de contrôle
+     const cleanValue = value.replace(/[\r\n\t]/g, '').trim();
      
      // Éviter les doublons et traiter seulement si nouveau contenu significatif
-     if (value && value !== lastInputValue && value.length >= minLength) {
-       setLastInputValue(value);
-       processBuffer(value);
+     if (cleanValue && cleanValue !== lastInputValue && cleanValue.length >= minLength) {
+       setLastInputValue(cleanValue);
+       processBuffer(cleanValue);
        
-       // Clear l'input après traitement pour éviter accumulation
+       // Clear l'input après traitement
        setTimeout(() => {
          target.value = '';
          setLastInputValue('');
@@ -120,16 +151,22 @@ export function useZebraScanner(options: ZebraScannerOptions) {
    }
  }, [state.isListening, lastInputValue, processBuffer, minLength]);
 
- // Gestion focus/paste pour certains modèles qui "collent" le code
+ // 🔧 CORRECTION: Paste event avec nettoyage
  const handlePaste = useCallback((event: ClipboardEvent) => {
    if (!state.isListening) return;
    
    const pastedText = event.clipboardData?.getData('text');
    console.log('📋 Paste event:', { pastedText });
    
-   if (pastedText && pastedText.length >= minLength) {
-     event.preventDefault();
-     processBuffer(pastedText);
+   if (pastedText) {
+     // 🔧 Nettoyer le texte collé
+     const cleanText = pastedText.replace(/[\r\n\t]/g, '').trim();
+     
+     if (cleanText.length >= minLength) {
+       event.preventDefault();
+       event.stopPropagation();
+       processBuffer(cleanText);
+     }
    }
  }, [state.isListening, processBuffer, minLength]);
 
@@ -154,25 +191,31 @@ export function useZebraScanner(options: ZebraScannerOptions) {
    }
  }, [timeoutId]);
 
- // Gestion des événements - MULTI-MÉTHODES pour compatibilité maximale
+ // 🔧 CORRECTION: Utiliser keydown au lieu de keypress pour meilleur contrôle
  useEffect(() => {
    if (state.isListening) {
      console.log('📡 Activating all scanner listeners');
      
-     // Méthode 1: Scan caractère par caractère (anciens modèles)
-     document.addEventListener('keypress', handleKeyPress);
+     // 🔥 CHANGEMENT: keydown au lieu de keypress pour capturer toutes les touches
+     document.addEventListener('keydown', handleKeyPress, { 
+       capture: true, // Capturer en phase de capture
+       passive: false // Permettre preventDefault
+     });
      
      // Méthode 2: Scan direct dans input (nouveaux modèles)
      document.addEventListener('input', handleInputEvent);
      
      // Méthode 3: Paste automatique (certains modèles)
-     document.addEventListener('paste', handlePaste);
+     document.addEventListener('paste', handlePaste, { 
+       capture: true,
+       passive: false 
+     });
      
      return () => {
        console.log('🔇 Removing all scanner listeners');
-       document.removeEventListener('keypress', handleKeyPress);
+       document.removeEventListener('keydown', handleKeyPress, { capture: true });
        document.removeEventListener('input', handleInputEvent);
-       document.removeEventListener('paste', handlePaste);
+       document.removeEventListener('paste', handlePaste, { capture: true });
      };
    }
  }, [state.isListening, handleKeyPress, handleInputEvent, handlePaste]);
