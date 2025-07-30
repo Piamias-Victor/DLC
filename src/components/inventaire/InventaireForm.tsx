@@ -1,196 +1,54 @@
-// src/components/inventaire/InventaireForm.tsx - Avec date de péremption
 'use client';
-
-import { useState, useRef, useEffect } from 'react';
-import { Hash, Plus, AlertCircle, CheckCircle, Undo, Calendar } from 'lucide-react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Plus, Hash, Calendar, AlertCircle, CheckCircle } from 'lucide-react';
+import { UrgencyCalculator } from '@/lib/services/urgencyCalculator';
 import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
 import { BarcodeInput } from '../molecules/BarcodeInput';
-import { useAddInventaireItem } from '@/hooks/useInventaire';
-import { ParsedCode } from '@/lib/types';
 
 interface InventaireFormProps {
   inventaireId: string;
   onItemAdded: () => void;
   clearTrigger: number;
-  lastAddedItem?: any;
 }
 
-// 🆕 Interface étendue avec date de péremption
-interface InventaireItemFormData {
+interface FormData {
   ean13: string;
   quantite: string;
-  datePeremption: string; // 🆕 NOUVEAU: Date de péremption
+  datePeremption: string;
 }
 
-export function InventaireForm({ 
-  inventaireId, 
-  onItemAdded, 
-  clearTrigger,
-  lastAddedItem 
-}: InventaireFormProps) {
-  const addItemMutation = useAddInventaireItem(inventaireId);
-  const quantiteInputRef = useRef<HTMLInputElement>(null);
-  const dateInputRef = useRef<HTMLInputElement>(null);
+interface FormErrors {
+  ean13?: string;
+  quantite?: string;
+  datePeremption?: string;
+}
 
-  // 🆕 État du formulaire avec date
-  const [formData, setFormData] = useState<InventaireItemFormData>({
-    ean13: '',
-    quantite: '1',
-    datePeremption: '' // 🆕 NOUVEAU
-  });
+const initialFormData: FormData = {
+  ean13: '',
+  quantite: '1',
+  datePeremption: ''
+};
 
-  const [errors, setErrors] = useState<Partial<InventaireItemFormData>>({});
+export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: InventaireFormProps) {
+  const [formData, setFormData] = useState<FormData>(initialFormData);
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [internalClearTrigger, setInternalClearTrigger] = useState(0);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showDoublon, setShowDoublon] = useState(false);
+  
+  // 🆕 États pour la nouvelle logique
+  const [previousCode, setPreviousCode] = useState<string>('');
+  const [isAutoValidating, setIsAutoValidating] = useState(false);
 
-  // Reset du formulaire lors du clearTrigger
-  useEffect(() => {
-    if (clearTrigger > 0) {
-      setFormData({ ean13: '', quantite: '1', datePeremption: '' });
-      setErrors({});
-      setShowSuccess(false);
-      setShowDoublon(false);
-    }
-  }, [clearTrigger]);
+  const quantiteInputRef = useRef<HTMLInputElement>(null);
+  const dateInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
 
-  // Affichage des messages de succès/doublon
-  useEffect(() => {
-    if (addItemMutation.isSuccess && addItemMutation.data) {
-      const response = addItemMutation.data;
-      
-      if (response.isDoublon) {
-        setShowDoublon(true);
-        setTimeout(() => setShowDoublon(false), 3000);
-      } else {
-        setShowSuccess(true);
-        setTimeout(() => setShowSuccess(false), 2000);
-      }
-    }
-  }, [addItemMutation.isSuccess, addItemMutation.data]);
-
-  // Gestion du scan de code-barres
-  const handleScan = (code: string, parsedData?: ParsedCode) => {
-    let processedCode = code;
-    let autoDate = formData.datePeremption;
-    
-    // 🆕 Traitement spécial pour Data Matrix avec date d'expiration
-    if (parsedData?.codeType === 'DATA_MATRIX') {
-      if (parsedData.gtin) {
-        processedCode = parsedData.gtin;
-      }
-      if (parsedData.expirationDate) {
-        autoDate = parsedData.expirationDate;
-        console.log('📅 Date auto-détectée depuis Data Matrix:', autoDate);
-      }
-    }
-    
-    setFormData(prev => ({ 
-      ...prev, 
-      ean13: processedCode,
-      datePeremption: autoDate
-    }));
-    
-    // Clear error si il y en avait une
-    if (errors.ean13) {
-      setErrors(prev => ({ ...prev, ean13: undefined }));
-    }
-    
-    // Focus logique : quantité si pas de date auto, sinon date si vide, sinon quantité
-    setTimeout(() => {
-      if (!autoDate) {
-        quantiteInputRef.current?.focus();
-      } else if (!formData.datePeremption) {
-        dateInputRef.current?.focus();
-      } else {
-        quantiteInputRef.current?.focus();
-      }
-      quantiteInputRef.current?.select();
-    }, 100);
-  };
-
-  // 🆕 Validation du formulaire avec date
-  const validateForm = (): boolean => {
-    const newErrors: Partial<InventaireItemFormData> = {};
-    
-    // Validation EAN13
-    if (!formData.ean13.trim()) {
-      newErrors.ean13 = 'Code-barres requis';
-    } else if (formData.ean13.trim().length < 8) {
-      newErrors.ean13 = 'Code trop court (minimum 8 caractères)';
-    }
-    
-    // Validation quantité
-    if (!formData.quantite.trim()) {
-      newErrors.quantite = 'Quantité requise';
-    } else {
-      const quantite = parseInt(formData.quantite);
-      if (isNaN(quantite) || quantite <= 0) {
-        newErrors.quantite = 'Quantité doit être > 0';
-      } else if (quantite > 9999) {
-        newErrors.quantite = 'Quantité maximum: 9999';
-      }
-    }
-    
-    // 🆕 Validation date de péremption (optionnelle)
-    if (formData.datePeremption) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const expDate = new Date(formData.datePeremption);
-      expDate.setHours(0, 0, 0, 0);
-      
-      if (expDate <= today) {
-        newErrors.datePeremption = 'Date doit être future';
-      }
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  // 🆕 Soumission avec création de signalement
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validateForm()) return;
-    
-    try {
-      // Préparation des données pour l'API
-const itemData = {
-  ean13: formData.ean13.trim(),
-  quantite: parseInt(formData.quantite),
-  // 🆕 Convertir la string en Date ou null
-  datePeremption: formData.datePeremption ? new Date(formData.datePeremption) : null
-};
-      
-      await addItemMutation.mutateAsync(itemData);
-      
-      // Reset du formulaire
-      setFormData({ ean13: '', quantite: '1', datePeremption: '' });
-      setErrors({});
-      
-      // Callback de succès
-      onItemAdded();
-      
-    } catch (error) {
-      console.error('Erreur ajout item:', error);
-    }
-  };
-
-  // Mise à jour des champs
-  const updateField = (field: keyof InventaireItemFormData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    
-    // Clear error pour ce champ
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: undefined }));
-    }
-  };
-
-  // 🆕 Calculer l'urgence basée sur la date
-  const calculateUrgency = (): 'low' | 'medium' | 'high' | 'critical' | null => {
+  // Calculateur d'urgence simple
+  const getUrgency = () => {
     if (!formData.datePeremption) return null;
-    
     const today = new Date();
     const expDate = new Date(formData.datePeremption);
     const diffDays = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -201,23 +59,170 @@ const itemData = {
     return 'low';
   };
 
-  const urgency = calculateUrgency();
+  const urgency = getUrgency();
+
+  // Mutation pour ajouter un item
+  const addItemMutation = useMutation({
+    mutationFn: async (data: FormData) => {
+      const response = await fetch(`/api/inventaires/${inventaireId}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ean13: data.ean13,
+          quantite: parseInt(data.quantite),
+          datePeremption: data.datePeremption || null
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Erreur lors de l\'ajout');
+      }
+
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ 
+        queryKey: ['inventaire-items', inventaireId] 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: ['inventaire-stats', inventaireId] 
+      });
+
+      if (data.isDuplicate) {
+        setShowDoublon(true);
+        setTimeout(() => setShowDoublon(false), 3000);
+      } else {
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 2000);
+      }
+
+      resetForm();
+      
+      // Callback onItemAdded
+      onItemAdded();
+    },
+    onError: (error) => {
+      console.error('Erreur ajout item:', error);
+    }
+  });
+
+  // 🆕 Fonction de reset du formulaire
+  const resetForm = useCallback(() => {
+    setFormData({
+      ean13: '',
+      quantite: '1',
+      datePeremption: ''
+    });
+    setErrors({});
+    setPreviousCode('');
+    setInternalClearTrigger(prev => prev + 1);
+    setIsAutoValidating(false);
+  }, []);
+
+  // 🆕 Auto-validation quand le code change
+  const autoValidateIfNeeded = useCallback(async (newCode: string) => {
+    if (previousCode && previousCode !== newCode && formData.ean13) {
+      setIsAutoValidating(true);
+      
+      try {
+        await addItemMutation.mutateAsync({
+          ean13: previousCode,
+          quantite: formData.quantite || '1',
+          datePeremption: formData.datePeremption
+        });
+      } catch (error) {
+        console.error('Erreur auto-validation:', error);
+        setIsAutoValidating(false);
+      }
+    }
+  }, [previousCode, formData, addItemMutation]);
+
+  // 🆕 Gestion du scan avec logique améliorée
+  const handleScan = useCallback(async (code: string) => {
+    console.log('🔍 Scan reçu:', code);
+    
+    // Si c'est le même code que celui en cours
+    if (formData.ean13 === code) {
+      const currentQuantite = parseInt(formData.quantite) || 0;
+      const newQuantite = currentQuantite + 1;
+      
+      setFormData(prev => ({
+        ...prev,
+        quantite: newQuantite.toString()
+      }));
+      
+      console.log('📈 Quantité incrémentée:', newQuantite);
+      return;
+    }
+
+    // Si c'est un nouveau code différent
+    if (formData.ean13 && formData.ean13 !== code) {
+      await autoValidateIfNeeded(code);
+    }
+
+    // Charger le nouveau code
+    setFormData(prev => ({
+      ...prev,
+      ean13: code,
+      quantite: '1'
+    }));
+    
+    setPreviousCode(code);
+    
+    setTimeout(() => {
+      quantiteInputRef.current?.focus();
+    }, 100);
+    
+  }, [formData.ean13, formData.quantite, autoValidateIfNeeded]);
+
+  // Mise à jour des champs
+  const updateField = useCallback((field: keyof FormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: undefined }));
+    }
+  }, [errors]);
+
+  // Validation manuelle
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.ean13.trim()) {
+      setErrors({ ean13: 'Code-barres requis' });
+      return;
+    }
+
+    if (!formData.quantite.trim() || parseInt(formData.quantite) < 1) {
+      setErrors({ quantite: 'Quantité invalide' });
+      return;
+    }
+
+    await addItemMutation.mutateAsync(formData);
+  };
+
+  // Reset sur clearTrigger
+  useEffect(() => {
+    if (clearTrigger > 0) {
+      resetForm();
+    }  
+  }, [clearTrigger, resetForm]);
 
   return (
     <div className="space-y-6">
       
       {/* Messages de feedback */}
       {showSuccess && (
-        <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3 animate-slide-down">
+        <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
           <CheckCircle className="w-5 h-5 text-green-600" />
           <span className="text-green-800 text-sm font-medium">
-            ✅ Produit ajouté à l inventaire + 🚨 Signalement créé !
+            Produit ajouté avec succès !
           </span>
         </div>
       )}
 
       {showDoublon && addItemMutation.data && (
-        <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg flex items-center gap-3 animate-slide-down">
+        <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-orange-600" />
           <div className="flex-1">
             <span className="text-orange-800 text-sm font-medium">
@@ -227,19 +232,27 @@ const itemData = {
         </div>
       )}
 
-      {/* Formulaire */}
+      {isAutoValidating && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
+          <div className="w-4 h-4 animate-spin border-2 border-blue-600 border-t-transparent rounded-full"></div>
+          <span className="text-blue-800 text-sm font-medium">
+            Validation automatique en cours...
+          </span>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-4">
         
         {/* Scanner de code-barres */}
         <BarcodeInput
           onScan={handleScan}
-          clearTrigger={clearTrigger}
+          clearTrigger={internalClearTrigger}
           autoFocus={true}
           placeholder="Scannez ou tapez le code-barres..."
           label="Code-Barres EAN13"
         />
 
-        {/* Code actuel affiché avec urgence */}
+        {/* Code actuel affiché */}
         {formData.ean13 && (
           <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
             <div className="flex items-center justify-between">
@@ -260,14 +273,14 @@ const itemData = {
                 }`}>
                   {urgency === 'critical' ? 'CRITIQUE' :
                    urgency === 'high' ? 'ÉLEVÉ' :
-                   urgency === 'medium' ? 'MOYEN' : 'FAIBLE'}
+                   urgency === 'medium' ? 'MOYEN' : 'BON'}
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* Quantité et Date */}
+        {/* Champs de saisie */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input
             ref={quantiteInputRef}
@@ -278,29 +291,25 @@ const itemData = {
             value={formData.quantite}
             onChange={(e) => updateField('quantite', e.target.value)}
             leftIcon={<Hash className="w-4 h-4" />}
-            placeholder="1"
+            placeholder="Ex: 15"
             error={errors.quantite}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                if (!formData.datePeremption) {
-                  dateInputRef.current?.focus();
-                } else {
-                  handleSubmit(e);
-                }
+                dateInputRef.current?.focus();
               }
             }}
+            className={parseInt(formData.quantite) > 1 ? 'ring-2 ring-green-300' : ''}
           />
 
-          {/* 🆕 Date de péremption */}
           <Input
             ref={dateInputRef}
-            label="Date de péremption (optionnelle)"
+            label="Date de péremption"
             type="date"
             value={formData.datePeremption}
             onChange={(e) => updateField('datePeremption', e.target.value)}
             leftIcon={<Calendar className="w-4 h-4" />}
             error={errors.datePeremption}
-            hint="Laissez vide si inconnue"
+            hint="Optionnelle - Pour créer un signalement"
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 handleSubmit(e);
@@ -309,62 +318,18 @@ const itemData = {
           />
         </div>
 
-        {/* 🆕 Résumé avec signalement */}
-        {formData.ean13 && formData.quantite && (
-          <div className="p-4 bg-gray-50 rounded-lg border">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
-              <div className="text-sm">
-                <p className="font-medium text-gray-900 mb-1">Actions à effectuer</p>
-                <div className="space-y-1 text-gray-600">
-                  <p>📦 <strong>Inventaire:</strong> {formData.quantite} unité(s) de {formData.ean13}</p>
-                  {formData.datePeremption ? (
-                    <p>🚨 <strong>Signalement:</strong> Créé automatiquement (expire le {new Date(formData.datePeremption).toLocaleDateString('fr-FR')})</p>
-                  ) : (
-                    <p>💡 <strong>Conseil:</strong> Ajoutez la date pour créer un signalement automatique</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          isLoading={addItemMutation.isPending || isAutoValidating}
+          disabled={!formData.ean13.trim() || !formData.quantite.trim()}
+          className="w-full"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          {formData.datePeremption ? 'Ajouter + Créer Signalement' : 'Ajouter au Stock'}
+        </Button>
 
-        {/* Boutons d'action */}
-        <div className="flex gap-3">
-          <Button
-            type="submit"
-            variant="primary"
-            size="lg"
-            isLoading={addItemMutation.isPending}
-            loadingText="Traitement..."
-            disabled={!formData.ean13.trim() || !formData.quantite.trim()}
-            className="flex-1"
-          >
-            <Plus className="w-4 h-4" />
-            {formData.datePeremption ? 'Ajouter + Signaler' : 'Ajouter à l\'Inventaire'}
-          </Button>
-          
-          {lastAddedItem && (
-            <Button
-              type="button"
-              variant="outline"
-              size="lg"
-              title="Annuler le dernier ajout"
-              className="px-4"
-            >
-              <Undo className="w-4 h-4" />
-            </Button>
-          )}
-        </div>
-
-        {/* Aide rapide */}
-        <div className="text-xs text-gray-500 space-y-1">
-          <p>💡 <strong>Workflow :</strong> Scanner → Quantité → Date (optionnelle) → Entrée</p>
-          <p>🔄 <strong>Doublons :</strong> Les quantités sont automatiquement additionnées</p>
-          <p>🚨 <strong>Signalement :</strong> Créé automatiquement si date de péremption renseignée</p>
-        </div>
-
-        {/* Erreur générale */}
         {addItemMutation.error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {addItemMutation.error.message}
@@ -372,6 +337,17 @@ const itemData = {
         )}
 
       </form>
+
+      {/* Aide utilisateur */}
+      <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+        <h4 className="text-sm font-medium text-gray-900 mb-2">Mode d emploi rapide :</h4>
+        <ul className="text-xs text-gray-600 space-y-1">
+          <li>• <strong>Même code plusieurs fois :</strong> Quantité s incrémente automatiquement</li>
+          <li>• <strong>Nouveau code :</strong> Validation automatique de la ligne précédente</li>
+          <li>• <strong>Bouton Ajouter :</strong> Validation manuelle possible à tout moment</li>
+        </ul>
+      </div>
+
     </div>
   );
 }
