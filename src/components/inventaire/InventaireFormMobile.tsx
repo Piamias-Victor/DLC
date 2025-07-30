@@ -1,12 +1,11 @@
 'use client';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Hash, Calendar, AlertCircle, CheckCircle } from 'lucide-react';
-
-import { UrgencyCalculator } from '@/lib/services/urgencyCalculator';
+import { Hash } from 'crypto';
+import { CheckCircle, AlertCircle, Calendar, Plus } from 'lucide-react';
 import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
-import { BarcodeInput } from '../molecules/BarcodeInput';
+
 
 interface InventaireFormMobileProps {
   inventaireId: string;
@@ -20,12 +19,6 @@ interface FormData {
   datePeremption: string;
 }
 
-interface FormErrors {
-  ean13?: string;
-  quantite?: string;
-  datePeremption?: string;
-}
-
 const initialFormData: FormData = {
   ean13: '',
   quantite: '1',
@@ -34,15 +27,13 @@ const initialFormData: FormData = {
 
 export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }: InventaireFormMobileProps) {
   const [formData, setFormData] = useState<FormData>(initialFormData);
-  const [errors, setErrors] = useState<FormErrors>({});
-  const [internalClearTrigger, setInternalClearTrigger] = useState(0);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [showSuccess, setShowSuccess] = useState(false);
   const [showDoublon, setShowDoublon] = useState(false);
-  
-  // 🆕 États pour la nouvelle logique
-  const [previousCode, setPreviousCode] = useState<string>('');
   const [isAutoValidating, setIsAutoValidating] = useState(false);
-
+  
+  // 🎯 SIMPLE: Un seul input invisible pour capturer les scans
+  const scanInputRef = useRef<HTMLInputElement>(null);
   const quantiteInputRef = useRef<HTMLInputElement>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
@@ -83,7 +74,6 @@ export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }
       return response.json();
     },
     onSuccess: (data) => {
-      // Invalider le cache
       queryClient.invalidateQueries({ 
         queryKey: ['inventaire-items', inventaireId] 
       });
@@ -91,7 +81,6 @@ export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }
         queryKey: ['inventaire-stats', inventaireId] 
       });
 
-      // Gestion des messages
       if (data.isDuplicate) {
         setShowDoublon(true);
         setTimeout(() => setShowDoublon(false), 3000);
@@ -100,58 +89,41 @@ export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }
         setTimeout(() => setShowSuccess(false), 2000);
       }
 
-      // 🆕 Reset du formulaire après validation
       resetForm();
-      
-      // Callback onItemAdded
       onItemAdded();
     },
     onError: (error) => {
       console.error('Erreur ajout item:', error);
+      setIsAutoValidating(false);
     }
   });
 
-  // 🆕 Fonction de reset du formulaire
+  // Reset du formulaire
   const resetForm = useCallback(() => {
     setFormData({
       ean13: '',
-      quantite: '1', // Reset à 1
+      quantite: '1',
       datePeremption: ''
     });
     setErrors({});
-    setPreviousCode('');
-    setInternalClearTrigger(prev => prev + 1);
     setIsAutoValidating(false);
+    
+    // 🎯 IMPORTANT: Refocus sur l'input de scan invisible
+    setTimeout(() => {
+      scanInputRef.current?.focus();
+    }, 100);
   }, []);
 
-  // 🆕 Auto-validation quand le code change
-  const autoValidateIfNeeded = useCallback(async (newCode: string) => {
-    if (previousCode && previousCode !== newCode && formData.ean13) {
-      setIsAutoValidating(true);
-      
-      try {
-        // Valider la ligne précédente
-        await addItemMutation.mutateAsync({
-          ean13: previousCode,
-          quantite: formData.quantite || '1',
-          datePeremption: formData.datePeremption
-        });
-        
-        // Le reset se fait dans onSuccess
-      } catch (error) {
-        console.error('Erreur auto-validation:', error);
-        setIsAutoValidating(false);
-      }
-    }
-  }, [previousCode, formData, addItemMutation]);
-
-  // 🆕 Gestion du scan avec logique améliorée
-  const handleScan = useCallback(async (code: string) => {
-    console.log('🔍 Scan reçu:', code);
+  // 🎯 LOGIQUE PRINCIPALE: Traitement d'un code scanné
+  const handleScan = useCallback(async (scannedCode: string) => {
+    console.log('🔍 Code scanné:', scannedCode);
     
-    // Si c'est le même code que celui en cours
-    if (formData.ean13 === code) {
-      // Incrémenter la quantité
+    // Nettoyer le code
+    const cleanCode = scannedCode.trim();
+    if (!cleanCode || cleanCode.length < 8) return;
+    
+    // CAS 1: Même code que celui en cours → Incrémenter quantité
+    if (formData.ean13 === cleanCode) {
       const currentQuantite = parseInt(formData.quantite) || 0;
       const newQuantite = currentQuantite + 1;
       
@@ -160,37 +132,74 @@ export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }
         quantite: newQuantite.toString()
       }));
       
-      console.log('📈 Quantité incrémentée:', newQuantite);
+      console.log('📈 Quantité incrémentée à:', newQuantite);
       return;
     }
-
-    // Si c'est un nouveau code différent
-    if (formData.ean13 && formData.ean13 !== code) {
-      // Auto-valider la ligne actuelle
-      await autoValidateIfNeeded(code);
+    
+    // CAS 2: Nouveau code ET on a déjà un code → Auto-valider l'ancien
+    if (formData.ean13 && formData.ean13 !== cleanCode) {
+      console.log('⚡ Auto-validation de:', formData.ean13);
+      setIsAutoValidating(true);
+      
+      try {
+        await addItemMutation.mutateAsync({
+          ean13: formData.ean13,
+          quantite: formData.quantite || '1',
+          datePeremption: formData.datePeremption
+        });
+        // Le reset se fait dans onSuccess
+      } catch (error) {
+        console.error('Erreur auto-validation:', error);
+        setIsAutoValidating(false);
+      }
     }
+    
+    // CAS 3: Premier scan OU après validation → Nouveau code
+    if (!isAutoValidating) {
+      setFormData(prev => ({
+        ...prev,
+        ean13: cleanCode,
+        quantite: '1'
+      }));
+      console.log('🆕 Nouveau code chargé:', cleanCode);
+    }
+    
+  }, [formData.ean13, formData.quantite, formData.datePeremption, addItemMutation, isAutoValidating]);
 
-    // Charger le nouveau code
-    setFormData(prev => ({
-      ...prev,
-      ean13: code,
-      quantite: '1' // Reset à 1 pour le nouveau produit
-    }));
+  // 🎯 GESTION DE L'INPUT DE SCAN INVISIBLE
+  const handleScanInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
     
-    setPreviousCode(code);
-    
-    // Focus sur quantité pour édition manuelle si besoin
-    setTimeout(() => {
-      quantiteInputRef.current?.focus();
-    }, 100);
-    
-  }, [formData.ean13, formData.quantite, autoValidateIfNeeded]);
+    // Le scanner envoie généralement tout d'un coup avec un Enter
+    // On traite dès qu'on a assez de caractères
+    if (value.length >= 8) {
+      handleScan(value);
+      // Vider l'input invisible
+      e.target.value = '';
+    }
+  }, [handleScan]);
 
-  // Mise à jour des champs
+  // 🎯 GESTION DU ENTER DANS L'INPUT DE SCAN
+  const handleScanInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const value = (e.target as HTMLInputElement).value;
+      if (value.length >= 8) {
+        handleScan(value);
+        (e.target as HTMLInputElement).value = '';
+      }
+    }
+  }, [handleScan]);
+
+  // Mise à jour des champs normaux
   const updateField = useCallback((field: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: undefined }));
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
     }
   }, [errors]);
 
@@ -211,15 +220,36 @@ export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }
     await addItemMutation.mutateAsync(formData);
   };
 
-  // Auto-focus sur le scanner au démarrage
+  // Focus automatique sur l'input de scan au démarrage et après reset
+  useEffect(() => {
+    scanInputRef.current?.focus();
+  }, []);
+
+  // Reset sur clearTrigger externe
   useEffect(() => {
     if (clearTrigger > 0) {
       resetForm();
-    }
+    }  
   }, [clearTrigger, resetForm]);
 
   return (
     <div className="space-y-4">
+      
+      {/* 🎯 INPUT INVISIBLE POUR CAPTURER LES SCANS */}
+      <input
+        ref={scanInputRef}
+        type="text"
+        onChange={handleScanInputChange}
+        onKeyDown={handleScanInputKeyDown}
+        style={{
+          position: 'absolute',
+          left: '-9999px',
+          opacity: 0,
+          pointerEvents: 'none'
+        }}
+        autoComplete="off"
+        tabIndex={-1}
+      />
       
       {/* Messages de feedback */}
       {showSuccess && (
@@ -242,7 +272,6 @@ export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }
         </div>
       )}
 
-      {/* Indicateur d'auto-validation */}
       {isAutoValidating && (
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
           <div className="w-4 h-4 animate-spin border-2 border-blue-600 border-t-transparent rounded-full"></div>
@@ -252,27 +281,23 @@ export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }
         </div>
       )}
 
-      {/* Formulaire */}
+      {/* Formulaire principal */}
       <form onSubmit={handleSubmit} className="space-y-4">
         
-        {/* Scanner de code-barres */}
-        <BarcodeInput
-          onScan={handleScan}
-          clearTrigger={internalClearTrigger}
-          autoFocus={true}
-          placeholder="Scanner code-barres..."
-          label="Code-Barres"
-        />
-
-        {/* Code affiché */}
-        {formData.ean13 && (
-          <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+        {/* Code scanné affiché */}
+        {formData.ean13 ? (
+          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
             <div className="flex items-center justify-between">
-              <div className="font-mono text-sm text-blue-900">
-                {formData.ean13}
+              <div>
+                <span className="text-xs font-medium text-blue-600 uppercase">
+                  Code produit
+                </span>
+                <div className="font-mono text-lg text-blue-900 mt-1">
+                  {formData.ean13}
+                </div>
               </div>
               {urgency && (
-                <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                   urgency === 'critical' ? 'bg-red-100 text-red-700' :
                   urgency === 'high' ? 'bg-orange-100 text-orange-700' :
                   urgency === 'medium' ? 'bg-yellow-100 text-yellow-700' :
@@ -285,9 +310,15 @@ export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }
               )}
             </div>
           </div>
+        ) : (
+          <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+            <span className="text-gray-500 text-sm">
+              📱 Scannez un produit pour commencer
+            </span>
+          </div>
         )}
 
-        {/* Quantité et Date */}
+        {/* Champs de saisie */}
         <div className="space-y-3">
           <Input
             ref={quantiteInputRef}
@@ -296,16 +327,21 @@ export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }
             min="1"
             max="9999"
             value={formData.quantite}
-            onChange={(e : any) => updateField('quantite', e.target.value)}
-            leftIcon={<Hash className="w-4 h-4" />}
+            onChange={(e) => updateField('quantite', e.target.value)}
+            // leftIcon={<Hash className="w-4 h-4" />}
             error={errors.quantite}
-            onKeyDown={(e : any) => {
+            onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 dateInputRef.current?.focus();
               }
             }}
-            // 🆕 Indicateur visuel si quantité > 1
-            className={parseInt(formData.quantite) > 1 ? 'ring-2 ring-green-300' : ''}
+            onBlur={() => {
+              // 🎯 IMPORTANT: Refocus sur le scan après édition manuelle
+              setTimeout(() => {
+                scanInputRef.current?.focus();
+              }, 100);
+            }}
+            className={parseInt(formData.quantite) > 1 ? '!ring-2 !ring-green-300' : ''}
           />
 
           <Input
@@ -313,19 +349,24 @@ export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }
             label="Date péremption (optionnelle)"
             type="date"
             value={formData.datePeremption}
-            onChange={(e : any) => updateField('datePeremption', e.target.value)}
+            onChange={(e) => updateField('datePeremption', e.target.value)}
             leftIcon={<Calendar className="w-4 h-4" />}
             error={errors.datePeremption}
-            hint="Pour créer un signalement"
-            onKeyDown={(e : any) => {
+            onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 handleSubmit(e);
               }
             }}
+            onBlur={() => {
+              // 🎯 IMPORTANT: Refocus sur le scan après édition manuelle
+              setTimeout(() => {
+                scanInputRef.current?.focus();
+              }, 100);
+            }}
           />
         </div>
 
-        {/* Submit */}
+        {/* Bouton de validation */}
         <Button
           type="submit"
           variant="primary"
@@ -333,12 +374,17 @@ export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }
           isLoading={addItemMutation.isPending || isAutoValidating}
           disabled={!formData.ean13.trim() || !formData.quantite.trim()}
           className="w-full"
+          onClick={() => {
+            // 🎯 IMPORTANT: Refocus sur le scan après validation manuelle
+            setTimeout(() => {
+              scanInputRef.current?.focus();
+            }, 200);
+          }}
         >
           <Plus className="w-4 h-4" />
           {formData.datePeremption ? 'Ajouter + Signaler' : 'Ajouter'}
         </Button>
 
-        {/* Erreur */}
         {addItemMutation.error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {addItemMutation.error.message}
@@ -347,12 +393,15 @@ export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }
 
       </form>
 
-      {/* 🆕 Aide utilisateur */}
-      <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-        <p className="text-xs text-gray-600 text-center">
-          💡 <strong>Astuce :</strong> Scannez plusieurs fois le même code pour augmenter la quantité, 
-          ou scannez un nouveau code pour valider automatiquement la ligne actuelle
-        </p>
+      {/* Instructions claires */}
+      <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+        <h4 className="text-sm font-medium text-gray-900 mb-2">📱 Mode scanner :</h4>
+        <ul className="text-xs text-gray-600 space-y-1">
+          <li>• <strong>Scannez directement</strong> - Pas besoin de cliquer nulle part</li>
+          <li>• <strong>Même code 2x</strong> - Quantité passe à 2</li>
+          <li>• <strong>Nouveau code</strong> - Valide l ancien automatiquement</li>
+          <li>• <strong>Édition manuelle</strong> - Cliquez sur Quantité pour modifier</li>
+        </ul>
       </div>
 
     </div>
