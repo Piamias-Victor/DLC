@@ -58,21 +58,38 @@ export function useZebraScanner(options: ZebraScannerOptions) {
    onScan(cleanCode);
  }, [onScan, onError, minLength, maxLength]);
 
- // 🔧 CORRECTION: Gestion améliorée des événements clavier
+ // 🔧 CORRECTION: Bloquer TOUS les raccourcis clavier du navigateur
  const handleKeyPress = useCallback((event: KeyboardEvent) => {
    if (!state.isListening) return;
 
    console.log('⌨️ Key pressed:', { 
      key: event.key, 
-     code: event.code, 
+     code: event.code,
+     ctrlKey: event.ctrlKey,
+     altKey: event.altKey,
+     metaKey: event.metaKey,
      target: event.target?.constructor?.name 
    });
 
-   // 🚫 FILTRAGE des caractères de contrôle - SOLUTION AU PROBLÈME
+   // 🚨 BLOQUER ABSOLUMENT tous les raccourcis clavier du navigateur
+   if (
+     event.ctrlKey || 
+     event.altKey || 
+     event.metaKey || 
+     event.shiftKey
+   ) {
+     console.log('🚫 Blocked browser shortcut:', event.key);
+     event.preventDefault();
+     event.stopPropagation();
+     event.stopImmediatePropagation();
+     return false;
+   }
+
+   // 🚫 FILTRAGE des caractères de contrôle
    const controlChars = [
      'Enter', 'Return', 'Tab', 'Escape', 'Backspace', 'Delete',
      'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-     'Home', 'End', 'PageUp', 'PageDown', 'Insert'
+     'Home', 'End', 'PageUp', 'PageDown', 'Insert', 'F1', 'F2', 'F3', 'F4', 'F5'
    ];
 
    // 🚫 Ignorer les caractères de contrôle ET les caractères \r, \n, \t
@@ -86,6 +103,7 @@ export function useZebraScanner(options: ZebraScannerOptions) {
      // 🔥 IMPORTANTE: Empêcher la propagation pour éviter navigation
      event.preventDefault();
      event.stopPropagation();
+     event.stopImmediatePropagation();
      
      // Si c'est Enter et qu'on a un buffer, traiter
      if (event.key === 'Enter' && buffer.length > 0) {
@@ -93,13 +111,14 @@ export function useZebraScanner(options: ZebraScannerOptions) {
        processBuffer(buffer);
        setBuffer('');
      }
-     return;
+     return false;
    }
 
    // ✅ Traiter SEULEMENT les caractères alphanumériques
    if (!/^[a-zA-Z0-9]$/.test(event.key)) {
      event.preventDefault();
-     return;
+     event.stopPropagation();
+     return false;
    }
 
    // Ajouter au buffer
@@ -191,31 +210,38 @@ export function useZebraScanner(options: ZebraScannerOptions) {
    }
  }, [timeoutId]);
 
- // 🔧 CORRECTION: Utiliser keydown au lieu de keypress pour meilleur contrôle
+ // 🔧 CORRECTION: Événements optimisés avec capture maximale
  useEffect(() => {
    if (state.isListening) {
      console.log('📡 Activating all scanner listeners');
      
-     // 🔥 CHANGEMENT: keydown au lieu de keypress pour capturer toutes les touches
-     document.addEventListener('keydown', handleKeyPress, { 
-       capture: true, // Capturer en phase de capture
+     // 🔥 TRIPLE PROTECTION: keydown, keyup ET keypress
+     const eventOptions = { 
+       capture: true, // Capturer en première phase
        passive: false // Permettre preventDefault
-     });
+     };
+     
+     document.addEventListener('keydown', handleKeyPress, eventOptions);
+     document.addEventListener('keyup', handleKeyPress, eventOptions);
+     document.addEventListener('keypress', handleKeyPress, eventOptions);
+     
+     // Protection window level pour les raccourcis système
+     window.addEventListener('keydown', handleKeyPress, eventOptions);
      
      // Méthode 2: Scan direct dans input (nouveaux modèles)
      document.addEventListener('input', handleInputEvent);
      
      // Méthode 3: Paste automatique (certains modèles)
-     document.addEventListener('paste', handlePaste, { 
-       capture: true,
-       passive: false 
-     });
+     document.addEventListener('paste', handlePaste, eventOptions);
      
      return () => {
        console.log('🔇 Removing all scanner listeners');
-       document.removeEventListener('keydown', handleKeyPress, { capture: true });
+       document.removeEventListener('keydown', handleKeyPress, eventOptions);
+       document.removeEventListener('keyup', handleKeyPress, eventOptions);
+       document.removeEventListener('keypress', handleKeyPress, eventOptions);
+       window.removeEventListener('keydown', handleKeyPress, eventOptions);
        document.removeEventListener('input', handleInputEvent);
-       document.removeEventListener('paste', handlePaste, { capture: true });
+       document.removeEventListener('paste', handlePaste, eventOptions);
      };
    }
  }, [state.isListening, handleKeyPress, handleInputEvent, handlePaste]);
