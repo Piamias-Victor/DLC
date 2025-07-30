@@ -58,68 +58,25 @@ export function useZebraScanner(options: ZebraScannerOptions) {
    onScan(cleanCode);
  }, [onScan, onError, minLength, maxLength]);
 
- // 🔧 CORRECTION: Bloquer TOUS les raccourcis clavier du navigateur
+ // Gestion des événements clavier (méthode 1 - scan caractère par caractère)
  const handleKeyPress = useCallback((event: KeyboardEvent) => {
    if (!state.isListening) return;
 
-   console.log('⌨️ Key pressed:', { 
-     key: event.key, 
-     code: event.code,
-     ctrlKey: event.ctrlKey,
-     altKey: event.altKey,
-     metaKey: event.metaKey,
-     target: event.target?.constructor?.name 
-   });
+   console.log('⌨️ Key pressed:', { key: event.key, code: event.code, target: event.target?.constructor?.name });
 
-   // 🚨 BLOQUER ABSOLUMENT tous les raccourcis clavier du navigateur
-   if (
-     event.ctrlKey || 
-     event.altKey || 
-     event.metaKey || 
-     event.shiftKey
-   ) {
-     console.log('🚫 Blocked browser shortcut:', event.key);
-     event.preventDefault();
-     event.stopPropagation();
-     event.stopImmediatePropagation();
-     return false;
-   }
-
-   // 🚫 FILTRAGE des caractères de contrôle
-   const controlChars = [
-     'Enter', 'Return', 'Tab', 'Escape', 'Backspace', 'Delete',
-     'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-     'Home', 'End', 'PageUp', 'PageDown', 'Insert', 'F1', 'F2', 'F3', 'F4', 'F5'
-   ];
-
-   // 🚫 Ignorer les caractères de contrôle ET les caractères \r, \n, \t
-   if (
-     controlChars.includes(event.key) || 
-     event.key === '\r' || 
-     event.key === '\n' || 
-     event.key === '\t' ||
-     event.key.length > 1 // Toute touche multi-caractères
-   ) {
-     // 🔥 IMPORTANTE: Empêcher la propagation pour éviter navigation
-     event.preventDefault();
-     event.stopPropagation();
-     event.stopImmediatePropagation();
+   // Enter = fin de scan
+   if (event.key === 'Enter') {
+     if (timeoutId) clearTimeout(timeoutId);
      
-     // Si c'est Enter et qu'on a un buffer, traiter
-     if (event.key === 'Enter' && buffer.length > 0) {
-       if (timeoutId) clearTimeout(timeoutId);
+     if (buffer.length > 0) {
        processBuffer(buffer);
        setBuffer('');
      }
-     return false;
+     return;
    }
 
-   // ✅ Traiter SEULEMENT les caractères alphanumériques
-   if (!/^[a-zA-Z0-9]$/.test(event.key)) {
-     event.preventDefault();
-     event.stopPropagation();
-     return false;
-   }
+   // Ignorer les touches de contrôle
+   if (event.key.length > 1) return;
 
    // Ajouter au buffer
    const newBuffer = buffer + event.key;
@@ -138,7 +95,7 @@ export function useZebraScanner(options: ZebraScannerOptions) {
    setTimeoutId(newTimeoutId);
  }, [state.isListening, buffer, timeoutId, timeout, processBuffer, minLength]);
 
- // 🔧 CORRECTION: Input event avec meilleur filtrage
+ // Gestion des événements input (méthode 2 - scan direct dans input)
  const handleInputEvent = useCallback((event: Event) => {
    if (!state.isListening) return;
    
@@ -147,21 +104,14 @@ export function useZebraScanner(options: ZebraScannerOptions) {
      const target = inputEvent.target as HTMLInputElement;
      const value = target.value;
      
-     console.log('📝 Input event:', { 
-       value, 
-       length: value.length, 
-       lastValue: lastInputValue 
-     });
-     
-     // 🔧 Nettoyer la valeur des caractères de contrôle
-     const cleanValue = value.replace(/[\r\n\t]/g, '').trim();
+     console.log('📝 Input event:', { value, length: value.length, lastValue: lastInputValue });
      
      // Éviter les doublons et traiter seulement si nouveau contenu significatif
-     if (cleanValue && cleanValue !== lastInputValue && cleanValue.length >= minLength) {
-       setLastInputValue(cleanValue);
-       processBuffer(cleanValue);
+     if (value && value !== lastInputValue && value.length >= minLength) {
+       setLastInputValue(value);
+       processBuffer(value);
        
-       // Clear l'input après traitement
+       // Clear l'input après traitement pour éviter accumulation
        setTimeout(() => {
          target.value = '';
          setLastInputValue('');
@@ -170,22 +120,16 @@ export function useZebraScanner(options: ZebraScannerOptions) {
    }
  }, [state.isListening, lastInputValue, processBuffer, minLength]);
 
- // 🔧 CORRECTION: Paste event avec nettoyage
+ // Gestion focus/paste pour certains modèles qui "collent" le code
  const handlePaste = useCallback((event: ClipboardEvent) => {
    if (!state.isListening) return;
    
    const pastedText = event.clipboardData?.getData('text');
    console.log('📋 Paste event:', { pastedText });
    
-   if (pastedText) {
-     // 🔧 Nettoyer le texte collé
-     const cleanText = pastedText.replace(/[\r\n\t]/g, '').trim();
-     
-     if (cleanText.length >= minLength) {
-       event.preventDefault();
-       event.stopPropagation();
-       processBuffer(cleanText);
-     }
+   if (pastedText && pastedText.length >= minLength) {
+     event.preventDefault();
+     processBuffer(pastedText);
    }
  }, [state.isListening, processBuffer, minLength]);
 
@@ -210,38 +154,25 @@ export function useZebraScanner(options: ZebraScannerOptions) {
    }
  }, [timeoutId]);
 
- // 🔧 CORRECTION: Événements optimisés avec capture maximale
+ // Gestion des événements - MULTI-MÉTHODES pour compatibilité maximale
  useEffect(() => {
    if (state.isListening) {
      console.log('📡 Activating all scanner listeners');
      
-     // 🔥 TRIPLE PROTECTION: keydown, keyup ET keypress
-     const eventOptions = { 
-       capture: true, // Capturer en première phase
-       passive: false // Permettre preventDefault
-     };
-     
-     document.addEventListener('keydown', handleKeyPress, eventOptions);
-     document.addEventListener('keyup', handleKeyPress, eventOptions);
-     document.addEventListener('keypress', handleKeyPress, eventOptions);
-     
-     // Protection window level pour les raccourcis système
-     window.addEventListener('keydown', handleKeyPress, eventOptions);
+     // Méthode 1: Scan caractère par caractère (anciens modèles)
+     document.addEventListener('keypress', handleKeyPress);
      
      // Méthode 2: Scan direct dans input (nouveaux modèles)
      document.addEventListener('input', handleInputEvent);
      
      // Méthode 3: Paste automatique (certains modèles)
-     document.addEventListener('paste', handlePaste, eventOptions);
+     document.addEventListener('paste', handlePaste);
      
      return () => {
        console.log('🔇 Removing all scanner listeners');
-       document.removeEventListener('keydown', handleKeyPress, eventOptions);
-       document.removeEventListener('keyup', handleKeyPress, eventOptions);
-       document.removeEventListener('keypress', handleKeyPress, eventOptions);
-       window.removeEventListener('keydown', handleKeyPress, eventOptions);
+       document.removeEventListener('keypress', handleKeyPress);
        document.removeEventListener('input', handleInputEvent);
-       document.removeEventListener('paste', handlePaste, eventOptions);
+       document.removeEventListener('paste', handlePaste);
      };
    }
  }, [state.isListening, handleKeyPress, handleInputEvent, handlePaste]);
