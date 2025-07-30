@@ -156,12 +156,12 @@ export function InventaireForm({
     
     try {
       // Préparation des données pour l'API
-      const itemData = {
-        ean13: formData.ean13.trim(),
-        quantite: parseInt(formData.quantite),
-        // 🆕 Passer la date pour créer le signalement
-        datePeremption: formData.datePeremption || null
-      };
+const itemData = {
+  ean13: formData.ean13.trim(),
+  quantite: parseInt(formData.quantite),
+  // 🆕 Convertir la string en Date ou null
+  datePeremption: formData.datePeremption ? new Date(formData.datePeremption) : null
+};
       
       await addItemMutation.mutateAsync(itemData);
       

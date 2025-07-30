@@ -118,11 +118,12 @@ export function InventaireFormMobile({
     if (!validateForm()) return;
     
     try {
-      const itemData = {
-        ean13: formData.ean13.trim(),
-        quantite: parseInt(formData.quantite),
-        datePeremption: formData.datePeremption ? formData.datePeremption : null
-      };
+const itemData = {
+  ean13: formData.ean13.trim(),
+  quantite: parseInt(formData.quantite),
+  // 🆕 Convertir la string en Date ou null
+  datePeremption: formData.datePeremption ? new Date(formData.datePeremption) : null
+};
       
       await addItemMutation.mutateAsync(itemData);
       

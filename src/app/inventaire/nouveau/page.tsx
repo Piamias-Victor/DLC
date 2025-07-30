@@ -147,7 +147,7 @@ export default function NouvelInventairePage() {
                     Ajoutez des détails sur le contexte ou les objectifs de cet inventaire
                   </p>
                   <span className="text-xs text-gray-400">
-                    {formData.description.length}/500
+                    {formData.description?.length || 0}/500
                   </span>
                 </div>
               </div>
