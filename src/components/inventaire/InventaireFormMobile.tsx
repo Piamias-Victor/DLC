@@ -1,11 +1,9 @@
 'use client';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Hash } from 'crypto';
-import { CheckCircle, AlertCircle, Calendar, Plus } from 'lucide-react';
+import { Plus, Hash, Calendar, AlertCircle, CheckCircle } from 'lucide-react';
 import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
-
 
 interface InventaireFormMobileProps {
   inventaireId: string;
@@ -118,9 +116,17 @@ export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }
   const handleScan = useCallback(async (scannedCode: string) => {
     console.log('🔍 Code scanné:', scannedCode);
     
-    // Nettoyer le code
-    const cleanCode = scannedCode.trim();
-    if (!cleanCode || cleanCode.length < 8) return;
+    // 🛡️ NETTOYAGE SÉCURISÉ: Supprimer tous caractères bizarres
+    const cleanCode = scannedCode
+      .replace(/[^\d]/g, '') // Garder seulement les chiffres
+      .trim();
+      
+    console.log('🧹 Code nettoyé:', cleanCode);
+    
+    if (!cleanCode || cleanCode.length < 8) {
+      console.log('❌ Code trop court ou invalide');
+      return;
+    }
     
     // CAS 1: Même code que celui en cours → Incrémenter quantité
     if (formData.ean13 === cleanCode) {
@@ -181,8 +187,16 @@ export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }
 
   // 🎯 GESTION DU ENTER DANS L'INPUT DE SCAN
   const handleScanInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    // 🛡️ PROTECTION: Empêcher tous les raccourcis clavier pendant le scan
+    if (e.ctrlKey || e.metaKey || e.altKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    
     if (e.key === 'Enter') {
       e.preventDefault();
+      e.stopPropagation();
       const value = (e.target as HTMLInputElement).value;
       if (value.length >= 8) {
         handleScan(value);
@@ -222,7 +236,26 @@ export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }
 
   // Focus automatique sur l'input de scan au démarrage et après reset
   useEffect(() => {
+    // 🛡️ PROTECTION GLOBALE: Capturer les raccourcis dangereux
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Si c'est un raccourci système pendant qu'on est sur la page de scan
+      if ((e.ctrlKey || e.metaKey) && ['l', 't', 'n', 'w', 'r'].includes(e.key.toLowerCase())) {
+        // Vérifier si c'est probablement un scan accidentel
+        const activeElement = document.activeElement;
+        if (activeElement === scanInputRef.current) {
+          console.log('🛡️ Raccourci bloqué pendant scan:', e.key);
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }
+    };
+    
+    document.addEventListener('keydown', handleGlobalKeyDown, true);
     scanInputRef.current?.focus();
+    
+    return () => {
+      document.removeEventListener('keydown', handleGlobalKeyDown, true);
+    };
   }, []);
 
   // Reset sur clearTrigger externe
@@ -327,10 +360,10 @@ export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }
             min="1"
             max="9999"
             value={formData.quantite}
-            onChange={(e) => updateField('quantite', e.target.value)}
-            // leftIcon={<Hash className="w-4 h-4" />}
+            onChange={(e : any) => updateField('quantite', e.target.value)}
+            leftIcon={<Hash className="w-4 h-4" />}
             error={errors.quantite}
-            onKeyDown={(e) => {
+            onKeyDown={(e : any) => {
               if (e.key === 'Enter') {
                 dateInputRef.current?.focus();
               }
@@ -349,10 +382,10 @@ export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }
             label="Date péremption (optionnelle)"
             type="date"
             value={formData.datePeremption}
-            onChange={(e) => updateField('datePeremption', e.target.value)}
+            onChange={(e : any) => updateField('datePeremption', e.target.value)}
             leftIcon={<Calendar className="w-4 h-4" />}
             error={errors.datePeremption}
-            onKeyDown={(e) => {
+            onKeyDown={(e : any) => {
               if (e.key === 'Enter') {
                 handleSubmit(e);
               }
