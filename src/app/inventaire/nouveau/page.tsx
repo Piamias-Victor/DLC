@@ -160,7 +160,7 @@ export default function NouvelInventairePage() {
                 <ul className="text-sm text-blue-800 space-y-1">
                   <li>• Un seul inventaire peut être EN_COURS à la fois</li>
                   <li>• Vous pourrez modifier le nom et la description plus tard</li>
-                  <li>• L'inventaire sera automatiquement daté et chronométré</li>
+                  <li>• L inventaire sera automatiquement daté et chronométré</li>
                   <li>• Les doublons seront automatiquement additionnés</li>
                 </ul>
               </div>
@@ -185,7 +185,7 @@ export default function NouvelInventairePage() {
                   disabled={!formData.nom.trim()}
                   className="flex-1"
                 >
-                  Créer l'Inventaire
+                  Créer l Inventaire
                 </Button>
               </div>
 

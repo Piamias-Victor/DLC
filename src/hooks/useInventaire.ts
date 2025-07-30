@@ -1,13 +1,32 @@
-// src/hooks/useInventaire.ts
+// src/hooks/useInventaire.ts - Version compatible avec l'existant
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { 
   InventaireWithItems, 
   InventaireUpdateData,
-  InventaireItemCreateData,
   InventaireItem 
 } from '@/lib/types/inventaire';
 
-// ✅ FETCH DÉTAIL INVENTAIRE
+// ✅ Interface étendue avec date de péremption (compatible avec l'existant)
+interface InventaireItemCreateDataWithDate {
+  ean13: string;
+  quantite: number;
+  datePeremption?: Date | null; // 🆕 NOUVEAU: Date optionnelle
+}
+
+// ✅ Interface de réponse avec info signalement
+interface InventaireItemResponseWithSignalement extends InventaireItem {
+  isDoublon: boolean;
+  message: string;
+  previousQuantite?: number;
+  signalement?: {
+    created: boolean;
+    id?: string;
+    error?: string;
+    message: string;
+  };
+}
+
+// ✅ FETCH DÉTAIL INVENTAIRE (inchangé)
 const fetchInventaire = async (id: string): Promise<InventaireWithItems & { stats: any }> => {
   const response = await fetch(`/api/inventaires/${id}`);
   if (!response.ok) {
@@ -17,7 +36,7 @@ const fetchInventaire = async (id: string): Promise<InventaireWithItems & { stat
   return response.json();
 };
 
-// ✅ MISE À JOUR INVENTAIRE
+// ✅ MISE À JOUR INVENTAIRE (inchangé)
 const updateInventaire = async ({ id, data }: { id: string; data: InventaireUpdateData }): Promise<InventaireWithItems> => {
   const response = await fetch(`/api/inventaires/${id}`, {
     method: 'PUT',
@@ -33,15 +52,27 @@ const updateInventaire = async ({ id, data }: { id: string; data: InventaireUpda
   return response.json();
 };
 
-// ✅ AJOUT ITEM (avec gestion doublons)
-const addInventaireItem = async ({ inventaireId, data }: { 
+// ✅ AJOUT ITEM avec date et création signalement (NOUVELLE VERSION)
+const addInventaireItemWithDate = async ({ inventaireId, data }: { 
   inventaireId: string; 
-  data: InventaireItemCreateData 
-}): Promise<InventaireItem & { isDoublon: boolean; message: string }> => {
+  data: InventaireItemCreateDataWithDate 
+}): Promise<InventaireItemResponseWithSignalement> => {
+  
+  // Préparer les données avec date
+  const payload = {
+    ean13: data.ean13,
+    quantite: data.quantite,
+    datePeremption: data.datePeremption && data.datePeremption instanceof Date 
+      ? data.datePeremption.toISOString().split('T')[0] 
+      : data.datePeremption || null
+  };
+
+  console.log('📦 Envoi données inventaire avec signalement:', payload);
+
   const response = await fetch(`/api/inventaires/${inventaireId}/items`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
+    body: JSON.stringify(payload)
   });
   
   if (!response.ok) {
@@ -52,7 +83,9 @@ const addInventaireItem = async ({ inventaireId, data }: {
   return response.json();
 };
 
-// ✅ MODIFICATION QUANTITÉ ITEM
+// ✅ FONCTIONS EXISTANTES INCHANGÉES
+
+// MODIFICATION QUANTITÉ ITEM
 const updateInventaireItem = async ({ 
   inventaireId, 
   itemId, 
@@ -76,7 +109,7 @@ const updateInventaireItem = async ({
   return response.json();
 };
 
-// ✅ SUPPRESSION ITEM
+// SUPPRESSION ITEM
 const deleteInventaireItem = async ({ inventaireId, itemId }: { 
   inventaireId: string; 
   itemId: string 
@@ -93,7 +126,7 @@ const deleteInventaireItem = async ({ inventaireId, itemId }: {
   return response.json();
 };
 
-// ✅ FINALISATION INVENTAIRE
+// FINALISATION INVENTAIRE
 const finishInventaire = async ({ id, force = false }: { 
   id: string; 
   force?: boolean 
@@ -112,13 +145,13 @@ const finishInventaire = async ({ id, force = false }: {
   return response.json();
 };
 
-// ✅ HOOKS
+// ✅ HOOKS EXISTANTS (inchangés)
 export function useInventaire(id: string) {
   return useQuery({
     queryKey: ['inventaire', id],
     queryFn: () => fetchInventaire(id),
     enabled: !!id,
-    staleTime: 10 * 1000, // 10 secondes (plus court car données changeantes)
+    staleTime: 10 * 1000,
     refetchOnWindowFocus: true
   });
 }
@@ -129,36 +162,42 @@ export function useUpdateInventaire() {
   return useMutation({
     mutationFn: updateInventaire,
     onSuccess: (updatedInventaire) => {
-      // Mettre à jour le cache du détail
       queryClient.setQueryData(['inventaire', updatedInventaire.id], updatedInventaire);
-      
-      // Invalider la liste des inventaires
       queryClient.invalidateQueries({ queryKey: ['inventaires'] });
-      
       console.log('✅ Inventaire modifié:', updatedInventaire.nom);
     }
   });
 }
 
+// ✅ Hook ajout item AVEC NOUVELLE LOGIQUE
 export function useAddInventaireItem(inventaireId: string) {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: (data: InventaireItemCreateData) => addInventaireItem({ inventaireId, data }),
+    mutationFn: (data: InventaireItemCreateDataWithDate) => addInventaireItemWithDate({ inventaireId, data }),
     onSuccess: (newItem) => {
       // Invalider le détail de l'inventaire pour recharger les items et stats
       queryClient.invalidateQueries({ queryKey: ['inventaire', inventaireId] });
       
-      console.log('✅ Item ajouté:', {
+      // 🆕 Invalider aussi les signalements si un a été créé
+      if (newItem.signalement?.created) {
+        queryClient.invalidateQueries({ queryKey: ['signalements'] });
+      }
+      
+      console.log('✅ Item ajouté avec signalement:', {
         ean13: newItem.ean13,
         quantite: newItem.quantite,
         isDoublon: newItem.isDoublon,
-        message: newItem.message
+        signalementCreated: newItem.signalement?.created,
+        signalementId: newItem.signalement?.id,
+        message: newItem.message,
+        signalementMessage: newItem.signalement?.message
       });
     }
   });
 }
 
+// ✅ HOOKS EXISTANTS INCHANGÉS
 export function useUpdateInventaireItem(inventaireId: string) {
   const queryClient = useQueryClient();
   
@@ -166,9 +205,7 @@ export function useUpdateInventaireItem(inventaireId: string) {
     mutationFn: ({ itemId, quantite }: { itemId: string; quantite: number }) => 
       updateInventaireItem({ inventaireId, itemId, quantite }),
     onSuccess: (updatedItem) => {
-      // Invalider pour recharger les stats
       queryClient.invalidateQueries({ queryKey: ['inventaire', inventaireId] });
-      
       console.log('✅ Quantité modifiée:', updatedItem.message);
     }
   });
@@ -180,9 +217,7 @@ export function useDeleteInventaireItem(inventaireId: string) {
   return useMutation({
     mutationFn: (itemId: string) => deleteInventaireItem({ inventaireId, itemId }),
     onSuccess: (result) => {
-      // Invalider pour recharger la liste et les stats
       queryClient.invalidateQueries({ queryKey: ['inventaire', inventaireId] });
-      
       console.log('✅ Item supprimé:', result.message);
     }
   });
@@ -194,12 +229,8 @@ export function useFinishInventaire() {
   return useMutation({
     mutationFn: finishInventaire,
     onSuccess: (finishedInventaire) => {
-      // Mettre à jour le cache du détail
       queryClient.setQueryData(['inventaire', finishedInventaire.id], finishedInventaire);
-      
-      // Invalider la liste des inventaires (changement de statut)
       queryClient.invalidateQueries({ queryKey: ['inventaires'] });
-      
       console.log('✅ Inventaire finalisé:', finishedInventaire.message);
     }
   });

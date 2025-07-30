@@ -107,7 +107,7 @@ export function InventaireActions({ inventaire, onFinished }: InventaireActionsP
             className="flex items-center gap-2"
           >
             <CheckCircle className="w-4 h-4" />
-            Finaliser l'Inventaire
+            Finaliser l Inventaire
           </Button>
         )}
 
@@ -155,7 +155,7 @@ export function InventaireActions({ inventaire, onFinished }: InventaireActionsP
       {!isEmpty && (
         <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
           <p className="mb-1">
-            <strong>Format d'export :</strong> CSV avec colonnes "ean13;quantite"
+            <strong>Format d export :</strong> CSV avec colonnes ean13;quantite
           </p>
           <p>
             <strong>Traitement des doublons :</strong> Quantités automatiquement additionnées par EAN13
