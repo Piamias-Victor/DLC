@@ -41,7 +41,6 @@ export async function GET(request: NextRequest) {
 
     console.log('🔍 Filtres API avec pourcentage:', filters);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const whereConditions: any = {};
 
     // Filtre par recherche

@@ -1,0 +1,20 @@
+Environment variables loaded from .env
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "neondb", schema "public" at "ep-rapid-queen-abq06kk0-pooler.eu-west-2.aws.neon.tech"
+
+- Introspecting based on datasource defined in prisma/schema.prisma
+✔ Introspected 4 models and wrote them into prisma/schema.prisma in 1.50s
+      
+*** WARNING ***
+
+These models were enriched with `@@map` information taken from the previous Prisma schema:
+  - "InventaireItem"
+  - "Inventaire"
+  - "ProductRotation"
+  - "Signalement"
+
+These objects have comments defined in the database, which is not yet fully supported. Read more: https://pris.ly/d/database-comments
+  - Type: "field", name: "ProductRotation.prixAchatUnitaire"
+
+Run prisma generate to generate Prisma Client.
+
