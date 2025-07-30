@@ -6,9 +6,9 @@ import { Package, Hash, Clock, Edit2, Save, X } from 'lucide-react';
 import { Card, CardContent } from '../atoms/Card';
 import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
-import { useUpdateInventaire } from '@/hooks';
 import { INVENTAIRE_STATUS_CONFIG, INVENTAIRE_STATUS_COLORS } from '@/lib/constants/inventaire';
 import type { InventaireWithItems, InventaireStatus } from '@/lib/types/inventaire';
+import { useUpdateInventaire } from '@/hooks/useInventaire';
 
 interface InventaireStatsProps {
   inventaire: InventaireWithItems & { stats?: any };
