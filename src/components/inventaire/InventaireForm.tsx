@@ -2,12 +2,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Hash, Calendar, AlertCircle, CheckCircle } from 'lucide-react';
-import { UrgencyCalculator } from '@/lib/services/urgencyCalculator';
 import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
-import { BarcodeInput } from '../molecules/BarcodeInput';
 
-interface InventaireFormProps {
+
+interface InventaireFormMobileProps {
   inventaireId: string;
   onItemAdded: () => void;
   clearTrigger: number;
@@ -31,16 +30,20 @@ const initialFormData: FormData = {
   datePeremption: ''
 };
 
-export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: InventaireFormProps) {
+export function InventaireFormMobile({ inventaireId, onItemAdded, clearTrigger }: InventaireFormMobileProps) {
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [errors, setErrors] = useState<FormErrors>({});
-  const [internalClearTrigger, setInternalClearTrigger] = useState(0);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showDoublon, setShowDoublon] = useState(false);
   
   // 🆕 États pour la nouvelle logique
   const [previousCode, setPreviousCode] = useState<string>('');
   const [isAutoValidating, setIsAutoValidating] = useState(false);
+  
+  // 🆕 États pour capture globale des scans
+  const [scanBuffer, setScanBuffer] = useState<string>('');
+  const [lastKeyTime, setLastKeyTime] = useState<number>(0);
+  const [isScanning, setIsScanning] = useState<boolean>(false);
 
   const quantiteInputRef = useRef<HTMLInputElement>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
@@ -82,6 +85,7 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
       return response.json();
     },
     onSuccess: (data) => {
+      // Invalider le cache
       queryClient.invalidateQueries({ 
         queryKey: ['inventaire-items', inventaireId] 
       });
@@ -89,6 +93,7 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
         queryKey: ['inventaire-stats', inventaireId] 
       });
 
+      // Gestion des messages
       if (data.isDuplicate) {
         setShowDoublon(true);
         setTimeout(() => setShowDoublon(false), 3000);
@@ -97,6 +102,7 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
         setTimeout(() => setShowSuccess(false), 2000);
       }
 
+      // 🆕 Reset du formulaire après validation
       resetForm();
       
       // Callback onItemAdded
@@ -111,12 +117,11 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
   const resetForm = useCallback(() => {
     setFormData({
       ean13: '',
-      quantite: '1',
+      quantite: '1', // Reset à 1
       datePeremption: ''
     });
     setErrors({});
     setPreviousCode('');
-    setInternalClearTrigger(prev => prev + 1);
     setIsAutoValidating(false);
   }, []);
 
@@ -126,11 +131,14 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
       setIsAutoValidating(true);
       
       try {
+        // Valider la ligne précédente
         await addItemMutation.mutateAsync({
           ean13: previousCode,
           quantite: formData.quantite || '1',
           datePeremption: formData.datePeremption
         });
+        
+        // Le reset se fait dans onSuccess
       } catch (error) {
         console.error('Erreur auto-validation:', error);
         setIsAutoValidating(false);
@@ -138,12 +146,13 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
     }
   }, [previousCode, formData, addItemMutation]);
 
-  // 🆕 Gestion du scan avec logique améliorée
-  const handleScan = useCallback(async (code: string) => {
-    console.log('🔍 Scan reçu:', code);
+  // 🆕 Fonction de traitement des scans
+  const processScan = useCallback(async (code: string) => {
+    console.log('🔍 Scan traité:', code);
     
     // Si c'est le même code que celui en cours
     if (formData.ean13 === code) {
+      // Incrémenter la quantité
       const currentQuantite = parseInt(formData.quantite) || 0;
       const newQuantite = currentQuantite + 1;
       
@@ -158,6 +167,7 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
 
     // Si c'est un nouveau code différent
     if (formData.ean13 && formData.ean13 !== code) {
+      // Auto-valider la ligne actuelle
       await autoValidateIfNeeded(code);
     }
 
@@ -165,16 +175,78 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
     setFormData(prev => ({
       ...prev,
       ean13: code,
-      quantite: '1'
+      quantite: '1' // Reset à 1 pour le nouveau produit
     }));
     
     setPreviousCode(code);
     
-    setTimeout(() => {
-      quantiteInputRef.current?.focus();
-    }, 100);
-    
   }, [formData.ean13, formData.quantite, autoValidateIfNeeded]);
+
+  // 🆕 Capture globale des scans au niveau de la page
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const currentTime = Date.now();
+      const timeDiff = currentTime - lastKeyTime;
+      
+      // Si c'est un champ input/textarea, ignorer (sauf si c'est clairement un scan)
+      const target = event.target as HTMLElement;
+      const isInputField = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+      
+      // Détecter un scan : caractères rapides ou Enter après une séquence
+      const isLikelyScan = timeDiff < 50 || (isScanning && timeDiff < 100);
+      
+      if (event.key === 'Enter') {
+        // Si on a un buffer et qu'on était en train de scanner
+        if (scanBuffer.length >= 8 && isScanning) {
+          event.preventDefault();
+          event.stopPropagation();
+          
+          // Valider le code scanné
+          if (/^\d{8,}$/.test(scanBuffer)) {
+            processScan(scanBuffer);
+          }
+          
+          // Reset
+          setScanBuffer('');
+          setIsScanning(false);
+        }
+        return;
+      }
+      
+      // Ignorer les touches de contrôle
+      if (event.key.length > 1) return;
+      
+      // Si c'est dans un input ET que ce n'est pas un scan rapide, laisser faire
+      if (isInputField && !isLikelyScan) {
+        return;
+      }
+      
+      // Si c'est un scan rapide, intercepter même dans les inputs
+      if (isLikelyScan && isInputField) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      
+      // Ajouter au buffer
+      const newBuffer = scanBuffer + event.key;
+      setScanBuffer(newBuffer);
+      setIsScanning(true);
+      setLastKeyTime(currentTime);
+      
+      // Reset automatique après timeout
+      setTimeout(() => {
+        setScanBuffer('');
+        setIsScanning(false);
+      }, 200);
+    };
+
+    // Ajouter l'écouteur global
+    document.addEventListener('keydown', handleKeyDown, true);
+    
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [scanBuffer, lastKeyTime, isScanning, processScan]);
 
   // Mise à jour des champs
   const updateField = useCallback((field: keyof FormData, value: string) => {
@@ -184,7 +256,7 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
     }
   }, [errors]);
 
-  // Validation manuelle
+  // Validation manuelle (bouton)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -201,7 +273,7 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
     await addItemMutation.mutateAsync(formData);
   };
 
-  // Reset sur clearTrigger
+  // Reset sur clearTrigger externe
   useEffect(() => {
     if (clearTrigger > 0) {
       resetForm();
@@ -209,11 +281,11 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
   }, [clearTrigger, resetForm]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       
       {/* Messages de feedback */}
       {showSuccess && (
-        <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
+        <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3 animate-slide-down">
           <CheckCircle className="w-5 h-5 text-green-600" />
           <span className="text-green-800 text-sm font-medium">
             Produit ajouté avec succès !
@@ -222,7 +294,7 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
       )}
 
       {showDoublon && addItemMutation.data && (
-        <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg flex items-center gap-3">
+        <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg flex items-center gap-3 animate-slide-down">
           <AlertCircle className="w-5 h-5 text-orange-600" />
           <div className="flex-1">
             <span className="text-orange-800 text-sm font-medium">
@@ -232,8 +304,9 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
         </div>
       )}
 
+      {/* Indicateur d'auto-validation */}
       {isAutoValidating && (
-        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
           <div className="w-4 h-4 animate-spin border-2 border-blue-600 border-t-transparent rounded-full"></div>
           <span className="text-blue-800 text-sm font-medium">
             Validation automatique en cours...
@@ -241,31 +314,33 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
         </div>
       )}
 
+      {/* 🆕 Indicateur de scan en cours */}
+      {isScanning && scanBuffer.length > 0 && (
+        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-3">
+          <div className="w-4 h-4 animate-pulse bg-yellow-400 rounded-full"></div>
+          <span className="text-yellow-800 text-sm font-medium">
+            📱 Scan en cours: {scanBuffer}
+          </span>
+        </div>
+      )}
+
+      {/* Formulaire simplifié */}
       <form onSubmit={handleSubmit} className="space-y-4">
         
-        {/* Scanner de code-barres */}
-        <BarcodeInput
-          onScan={handleScan}
-          clearTrigger={internalClearTrigger}
-          autoFocus={true}
-          placeholder="Scannez ou tapez le code-barres..."
-          label="Code-Barres EAN13"
-        />
-
-        {/* Code actuel affiché */}
+        {/* Code affiché (plus besoin de BarcodeInput complexe) */}
         {formData.ean13 && (
-          <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-xs font-medium text-blue-600 uppercase">
-                  Code produit
+                  Code scanné
                 </span>
-                <div className="font-mono text-lg text-blue-900 mt-0.5">
+                <div className="font-mono text-lg text-blue-900 mt-1">
                   {formData.ean13}
                 </div>
               </div>
               {urgency && (
-                <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                   urgency === 'critical' ? 'bg-red-100 text-red-700' :
                   urgency === 'high' ? 'bg-orange-100 text-orange-700' :
                   urgency === 'medium' ? 'bg-yellow-100 text-yellow-700' :
@@ -274,14 +349,14 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
                   {urgency === 'critical' ? 'CRITIQUE' :
                    urgency === 'high' ? 'ÉLEVÉ' :
                    urgency === 'medium' ? 'MOYEN' : 'BON'}
-                </div>
+                </span>
               )}
             </div>
           </div>
         )}
 
-        {/* Champs de saisie */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Quantité et Date */}
+        <div className="space-y-3">
           <Input
             ref={quantiteInputRef}
             label="Quantité"
@@ -291,25 +366,24 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
             value={formData.quantite}
             onChange={(e) => updateField('quantite', e.target.value)}
             leftIcon={<Hash className="w-4 h-4" />}
-            placeholder="Ex: 15"
             error={errors.quantite}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 dateInputRef.current?.focus();
               }
             }}
-            className={parseInt(formData.quantite) > 1 ? 'ring-2 ring-green-300' : ''}
+            // 🆕 Indicateur visuel si quantité > 1
+            className={parseInt(formData.quantite) > 1 ? '!ring-2 !ring-green-300' : ''}
           />
 
           <Input
             ref={dateInputRef}
-            label="Date de péremption"
+            label="Date péremption (optionnelle)"
             type="date"
             value={formData.datePeremption}
             onChange={(e) => updateField('datePeremption', e.target.value)}
             leftIcon={<Calendar className="w-4 h-4" />}
             error={errors.datePeremption}
-            hint="Optionnelle - Pour créer un signalement"
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 handleSubmit(e);
@@ -318,6 +392,7 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
           />
         </div>
 
+        {/* Submit */}
         <Button
           type="submit"
           variant="primary"
@@ -326,10 +401,11 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
           disabled={!formData.ean13.trim() || !formData.quantite.trim()}
           className="w-full"
         >
-          <Plus className="w-4 h-4 mr-2" />
-          {formData.datePeremption ? 'Ajouter + Créer Signalement' : 'Ajouter au Stock'}
+          <Plus className="w-4 h-4" />
+          {formData.datePeremption ? 'Ajouter + Signaler' : 'Ajouter'}
         </Button>
 
+        {/* Erreur */}
         {addItemMutation.error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {addItemMutation.error.message}
@@ -338,13 +414,14 @@ export function InventaireForm({ inventaireId, onItemAdded, clearTrigger }: Inve
 
       </form>
 
-      {/* Aide utilisateur */}
-      <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-        <h4 className="text-sm font-medium text-gray-900 mb-2">Mode d emploi rapide :</h4>
+      {/* 🆕 Instructions utilisateur */}
+      <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+        <h4 className="text-sm font-medium text-gray-900 mb-2">Mode scanner :</h4>
         <ul className="text-xs text-gray-600 space-y-1">
-          <li>• <strong>Même code plusieurs fois :</strong> Quantité s incrémente automatiquement</li>
-          <li>• <strong>Nouveau code :</strong> Validation automatique de la ligne précédente</li>
-          <li>• <strong>Bouton Ajouter :</strong> Validation manuelle possible à tout moment</li>
+          <li>📱 <strong>Scannez depuis n importe où</strong> - Pas besoin de cliquer dans un champ</li>
+          <li>🔄 <strong>Même code plusieurs fois</strong> - Quantité s incrémente automatiquement</li>
+          <li>⚡ <strong>Nouveau code</strong> - Validation automatique de la ligne précédente</li>
+          <li>✋ <strong>Bouton Ajouter</strong> - Validation manuelle possible</li>
         </ul>
       </div>
 
